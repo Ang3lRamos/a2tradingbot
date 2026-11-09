@@ -16,7 +16,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 - [x] Fase 1: ingesta de datos
 - [ ] Fase 2: estrategia base y backtest (sin ventaja out-of-sample; ver docs/resultados_fase2.md)
 - [ ] Fase 3: analista IA (en evaluación: python -m tradebot.ai_eval)
-- [ ] Fase 4: riesgo y ejecución (código listo; falta probar órdenes reales en la cuenta demo)
+- [x] Fase 4: riesgo y ejecución (probado con órdenes reales en Binance Demo)
 - [ ] Fase 5: paper trading y dashboard (Streamlit)
 
 ## Puesta en marcha
