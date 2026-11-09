@@ -143,12 +143,32 @@ def selection_skill(rows: np.ndarray) -> float:
     return selection_r(rows) - float(rows[:, 0].mean())
 
 
-def bootstrap_interval(values: np.ndarray, statistic, n: int = 5000, level: float = 0.9) -> tuple[float, float]:
+# Señales de la misma semana tienden a terminar igual (BTC, ETH y SOL se mueven juntos y las
+# operaciones duran días): se remuestrean semanas completas para no subestimar el ruido.
+BLOCK = "7D"
+
+
+def bootstrap_interval(values: np.ndarray, statistic, n: int = 5000, level: float = 0.9,
+                       blocks: np.ndarray | None = None) -> tuple[float, float]:
+    """Intervalo por bootstrap. Con `blocks`, remuestrea grupos completos (block bootstrap) en vez de filas."""
     rng = np.random.default_rng(0)
-    draws = [statistic(values[rng.integers(0, len(values), len(values))]) for _ in range(n)]
+    if blocks is None:
+        groups = [np.array([i]) for i in range(len(values))]
+    else:
+        groups = [np.flatnonzero(blocks == b) for b in np.unique(blocks)]
+    draws = []
+    for _ in range(n):
+        picked = rng.integers(0, len(groups), len(groups))
+        draws.append(statistic(values[np.concatenate([groups[i] for i in picked])]))
     draws = [d for d in draws if not np.isnan(d)]
     tail = (1 - level) / 2 * 100
     return float(np.percentile(draws, tail)), float(np.percentile(draws, 100 - tail))
+
+
+def skill_interval(reviews: pd.DataFrame, by_week: bool = True) -> tuple[float, float]:
+    """Intervalo 90% de la habilidad de selección; por defecto remuestreando semanas completas."""
+    blocks = pd.to_datetime(reviews["ts"], utc=True).dt.floor(BLOCK).to_numpy() if by_week else None
+    return bootstrap_interval(reviews[["r", "size"]].to_numpy(), selection_skill, blocks=blocks)
 
 
 def scored_reviews(settings: Settings, instance: str) -> pd.DataFrame:
@@ -192,8 +212,11 @@ def report(settings: Settings) -> int:
     log.info("R por unidad de riesgo  sin IA: %+.3f | con IA: %+.3f",
              reviews["r"].mean(), selection_r(reviews[["r", "size"]].to_numpy()))
     skill = selection_skill(reviews[["r", "size"]].to_numpy())
-    low, high = bootstrap_interval(reviews[["r", "size"]].to_numpy(), selection_skill)
+    low, high = skill_interval(reviews)
+    naive_low, naive_high = skill_interval(reviews, by_week=False)
     log.info("Habilidad de selección: %+.3f R por unidad de riesgo (intervalo 90%%: %+.3f a %+.3f)", skill, low, high)
+    log.info("  intervalo por semanas completas (%d semanas); señal por señal sería %+.3f a %+.3f",
+             pd.to_datetime(reviews["ts"], utc=True).dt.floor(BLOCK).nunique(), naive_low, naive_high)
     log.info("  (compara contra reducir todas las señales por igual al mismo tamaño medio)")
     if low > 0:
         log.info("-> La IA elige mejor que el azar con evidencia estadística en esta muestra.")

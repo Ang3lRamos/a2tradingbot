@@ -159,3 +159,15 @@ def test_sizing_winners_up_is_skill():
     size = np.array([0.1, 0.1, 0.9, 0.1])
     assert selection_skill(np.column_stack([r, size])) > 0
     assert selection_skill(np.column_stack([r, size[::-1]])) < 0
+
+
+def test_block_bootstrap_widens_interval_for_correlated_outcomes():
+    from tradebot.ai_eval import bootstrap_interval
+
+    # 20 semanas; las 5 señales de cada semana terminan igual: en realidad hay 20 datos, no 100.
+    rng = np.random.default_rng(1)
+    r = np.repeat(rng.normal(0, 1, 20), 5)
+    blocks = np.repeat(np.arange(20), 5)
+    naive = bootstrap_interval(r, np.mean, n=2000)
+    by_block = bootstrap_interval(r, np.mean, n=2000, blocks=blocks)
+    assert (by_block[1] - by_block[0]) > 1.8 * (naive[1] - naive[0])

@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from tradebot import db
-from tradebot.ai_eval import bootstrap_interval, eval_instance, scored_reviews, selection_r, selection_skill
+from tradebot.ai_eval import eval_instance, scored_reviews, selection_r, selection_skill, skill_interval
 from tradebot.backtest.data import load_market
 from tradebot.backtest.metrics import buy_and_hold, summarize
 from tradebot.backtest.variants import build_variants, run_variant
@@ -160,7 +160,7 @@ def _ai_summary(reviews: pd.DataFrame) -> dict | None:
     if reviews.empty:
         return None
     rows = reviews[["r", "size"]].to_numpy()
-    low, high = bootstrap_interval(rows, selection_skill)
+    low, high = skill_interval(reviews)
     by_decision = [
         {"decision": d, "senales": len(g), "r_medio": g["r"].mean(), "acierto": (g["r"] > 0).mean(),
          "tamano_medio": g["size"].mean()}
