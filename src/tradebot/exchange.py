@@ -30,5 +30,15 @@ def create_exchange(bot: BotSettings, credentials: ExchangeCredentials) -> ccxt.
     return exchange
 
 
+def create_market_data_exchange(bot: BotSettings) -> ccxt.Exchange:
+    """Cliente del mercado real SIN llaves: solo lee datos públicos (velas, funding, open interest).
+
+    El histórico de Demo Trading es corto e incompleto; para backtest se necesita el del mercado real.
+    Sin llaves, este cliente no puede enviar órdenes.
+    """
+    exchange_class = getattr(ccxt, bot.exchange)
+    return exchange_class({"enableRateLimit": True, "options": {"defaultType": bot.market_type}})
+
+
 def is_paper(exchange: ccxt.Exchange) -> bool:
     return bool(exchange.isSandboxModeEnabled or exchange.options.get("enableDemoTrading"))

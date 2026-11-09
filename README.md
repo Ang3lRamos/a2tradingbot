@@ -1,4 +1,4 @@
-# tradebot
+﻿# tradebot
 
 Bot de trading de cripto que opera **solo en papel** (testnet), con un analista de IA (Claude) que revisa cada señal antes de operar. El objetivo es medir con honestidad si el bot, después de comisiones, le gana a comprar y mantener BTC.
 
@@ -13,7 +13,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 ## Estado
 
 - [x] Fase 0: configuración, esquema de base de datos, conexión a testnet y a Claude
-- [ ] Fase 1: ingesta de datos
+- [x] Fase 1: ingesta de datos
 - [ ] Fase 2: estrategia base y backtest
 - [ ] Fase 3: analista IA
 - [ ] Fase 4: riesgo y ejecución
@@ -41,6 +41,15 @@ python -m tradebot.check
 
 Debe mostrar `OK` en `claude`, `exchange` y `supabase`.
 
+## Ingesta de datos (Fase 1)
+
+```bash
+python -m tradebot.ingest                    # retoma desde lo último guardado; si no hay datos, baja 3 años
+python -m tradebot.ingest --since 2024-01-01 # vuelve a descargar desde una fecha (upsert, no duplica)
+```
+
+Guarda velas cerradas en `candles` y contexto en `market_context`: funding rate (cada 8 h), open interest (cada hora; Binance solo guarda 30 días) y Fear & Greed (diario). Los datos salen del mercado real con un cliente sin llaves, que solo puede leer. Cada fuente corre por separado: si una falla, las demás siguen.
+
 ## Tests
 
 ```bash
@@ -56,5 +65,8 @@ src/tradebot/config.py      carga de configuración y secretos
 src/tradebot/exchange.py    cliente ccxt (siempre en testnet)
 src/tradebot/ai/claude_cli.py  analista IA vía claude -p
 src/tradebot/check.py       chequeo de conexiones
+src/tradebot/data/          descarga paginada de velas y contexto de mercado
+src/tradebot/db.py          lectura y upserts en Supabase
+src/tradebot/ingest.py      comando de ingesta
 tests/
 ```
