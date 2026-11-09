@@ -31,6 +31,7 @@ class AISettings:
     daily_call_limit: int
     timeout_seconds: int
     fallback: str = "veto"
+    eval_daily_call_limit: int = 40
 
 
 @dataclass(frozen=True)
