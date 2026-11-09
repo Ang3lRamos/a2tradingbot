@@ -15,7 +15,7 @@ decision_model = "sonnet"
 # Por debajo del límite de tu plan, para dejar margen a tu uso normal de Claude.
 daily_call_limit = 40
 # Tope aparte para las tandas de `python -m tradebot.ai_eval`; no le quita cupo al bot en vivo.
-eval_daily_call_limit = 150
+eval_daily_call_limit = 250
 timeout_seconds = 180
 # Si la IA falla o se agota la cuota: "veto" (no operar la señal) o "base" (operarla sin revisión).
 fallback = "veto"
