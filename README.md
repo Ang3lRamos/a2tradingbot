@@ -16,7 +16,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 - [x] Fase 1: ingesta de datos
 - [ ] Fase 2: estrategia base y backtest (sin ventaja out-of-sample; ver docs/resultados_fase2.md)
 - [ ] Fase 3: analista IA (en evaluación: python -m tradebot.ai_eval)
-- [ ] Fase 4: riesgo y ejecución
+- [ ] Fase 4: riesgo y ejecución (código listo; falta probar órdenes reales en la cuenta demo)
 - [ ] Fase 5: paper trading y dashboard (Streamlit)
 
 ## Puesta en marcha
@@ -60,6 +60,20 @@ python -m tradebot.backtest --period oos        # evaluación final, una sola ve
 ```
 
 Simula vela a vela con comisiones, slippage, funding y las reglas de riesgo de `config/settings.toml`, y compara contra comprar y mantener BTC. Ante la duda supone lo peor para el bot (si una vela toca stop y take profit, cuenta el stop).
+
+## Bot en vivo (Fase 4)
+
+1. En Supabase, ejecuta `sql/002_live_trading.sql`.
+2. En demo.binance.com, transfiere USDT de Spot a Futuros USDⓈ-M.
+3. Corre el bot:
+
+```bash
+python -m tradebot.run --once      # un ciclo
+python -m tradebot.run             # cada hora, indefinidamente
+python -m tradebot.run --reanudar  # quitar kill switch o solo cierre tras revisar
+```
+
+Cada ciclo reconcilia la base con el exchange, actualiza el riesgo (pérdida diaria, kill switch), mueve trailing stops y procesa señales nuevas pasando por Claude. Los stops viven en el exchange: protegen aunque el bot esté caído. Si un stop no se puede poner, la posición se cierra de inmediato.
 
 ## Tests
 
