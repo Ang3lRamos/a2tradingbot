@@ -171,3 +171,39 @@ def test_block_bootstrap_widens_interval_for_correlated_outcomes():
     naive = bootstrap_interval(r, np.mean, n=2000)
     by_block = bootstrap_interval(r, np.mean, n=2000, blocks=blocks)
     assert (by_block[1] - by_block[0]) > 1.8 * (naive[1] - naive[0])
+
+
+def test_v2_context_has_no_dates_prices_and_ignores_future():
+    from tradebot.ai.context import build_context_v2
+
+    a = asset()
+    ts = a.candles.index[400]
+    decision = ts + pd.Timedelta("4h")
+    before = build_context_v2(a, a, ts, decision, LONG, "ruptura", 0.8)
+    text = render_prompt(before, version="v2")
+    assert not re.search(r"20\d\d-\d\d", text)
+    assert f"{a.candles['close'].iloc[400]:.0f}" not in text
+    future = a.candles.copy()
+    future.loc[future.index > ts, ["high", "low", "close", "volume"]] *= 3
+    changed = AssetFrames(future, a.features, a.regime, a.funding, a.fear_greed)
+    assert build_context_v2(changed, changed, ts, decision, LONG, "ruptura", 0.8) == before
+
+
+def test_score_reply_maps_to_decision_and_size():
+    from tradebot.ai.base import parse_decision
+
+    low, mid, high = (parse_decision(f'{{"score": {s}, "reasons": ["x"]}}') for s in (10, 55, 85))
+    assert (low.decision, low.size_multiplier, low.score) == ("veto", 0.0, 10)
+    assert (mid.decision, mid.size_multiplier, mid.score) == ("reduce", 0.55, 55)
+    assert (high.decision, high.size_multiplier) == ("approve", 1.0)
+    with pytest.raises(AIResponseError):
+        parse_decision('{"score": 140, "reasons": []}')
+
+
+def test_rank_correlation_detects_ordering():
+    from tradebot.ai_eval import rank_correlation
+
+    r = np.array([-1.0, -1.0, 0.5, 3.0])
+    assert rank_correlation(np.column_stack([r, [10, 20, 60, 90]])) > 0.9
+    assert rank_correlation(np.column_stack([r, [90, 60, 20, 10]])) < -0.9
+    assert np.isnan(rank_correlation(np.column_stack([r, [50, 50, 50, 50]])))

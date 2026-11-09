@@ -7,6 +7,7 @@ aprobadas contra las vetadas. Cada revisión se guarda en Supabase (signals + ai
 Uso:
     python -m tradebot.ai_eval --n 10      # revisa hasta 10 señales pendientes (respeta el tope diario)
     python -m tradebot.ai_eval --reporte   # compara resultados de lo revisado hasta ahora
+    python -m tradebot.ai_eval --prompt v2 --modelo opus --n 30   # experimento v2 (docs/investigacion.md)
 
 Se puede correr en tandas durante varios días: retoma donde quedó.
 """
@@ -21,8 +22,8 @@ import pandas as pd
 
 from tradebot import db
 from tradebot.ai import create_analyst
-from tradebot.ai.context import AssetFrames, build_context
-from tradebot.ai.prompt import PROMPT_VERSION, render_prompt
+from tradebot.ai.context import AssetFrames, build_context, build_context_v2
+from tradebot.ai.prompt import render_prompt
 from tradebot.ai.review import review_signal, size_for
 from tradebot.backtest.data import load_market
 from tradebot.backtest.outcomes import signal_outcome
@@ -48,17 +49,39 @@ class SampledSignal:
     reason: str
 
 
-def eval_instance(settings: Settings) -> str:
-    return f"{settings.bot.instance}-eval-{PROMPT_VERSION}"
+@dataclass(frozen=True)
+class EvalSpec:
+    seed: int
+    context: object          # build_context o build_context_v2
+    excludes: str | None     # versión cuya muestra no se puede repetir
 
 
-def sample_signals(signals: list[SampledSignal], size: int) -> list[SampledSignal]:
+# Cada versión del prompt se evalúa sobre su propia muestra fija (ver docs/investigacion.md).
+EVALS = {
+    "v1": EvalSpec(seed=SAMPLE_SEED, context=build_context, excludes=None),
+    "v2": EvalSpec(seed=11, context=build_context_v2, excludes="v1"),
+}
+
+
+def eval_instance(settings: Settings, version: str = "v1") -> str:
+    return f"{settings.bot.instance}-eval-{version}"
+
+
+def sample_for(version: str, signals: list[SampledSignal], size: int) -> list[SampledSignal]:
+    spec = EVALS[version]
+    if spec.excludes:
+        used = {(s.symbol, s.ts) for s in sample_for(spec.excludes, signals, size)}
+        signals = [s for s in signals if (s.symbol, s.ts) not in used]
+    return sample_signals(signals, size, spec.seed)
+
+
+def sample_signals(signals: list[SampledSignal], size: int, seed: int = SAMPLE_SEED) -> list[SampledSignal]:
     """Muestra repartida en el tiempo y en orden aleatorio fijo: una tanda parcial ya es representativa."""
     ordered = sorted(signals, key=lambda s: (s.ts, s.symbol))
     if len(ordered) > size:
         picks = np.linspace(0, len(ordered) - 1, size).round().astype(int)
         ordered = [ordered[i] for i in sorted(set(picks))]
-    rng = np.random.default_rng(SAMPLE_SEED)
+    rng = np.random.default_rng(seed)
     return [ordered[i] for i in rng.permutation(len(ordered))]
 
 
@@ -89,14 +112,16 @@ def load_universe(settings: Settings):
     return variant, prepared, assets, signals
 
 
-def run_reviews(settings: Settings, n: int, sample_size: int) -> int:
+def run_reviews(settings: Settings, n: int, sample_size: int, version: str = "v1", model: str | None = None) -> int:
     variant, _, assets, signals = load_universe(settings)
-    sample = sample_signals(signals, sample_size)
+    sample = sample_for(version, signals, sample_size)
+    spec = EVALS[version]
     market_asset = assets[next(iter(assets))]  # el primer símbolo de la config es el referente (BTC)
     step = pd.Timedelta(variant.timeframe)
     analyst = create_analyst(settings.ai)
-    eval_ai = replace(settings.ai, daily_call_limit=settings.ai.eval_daily_call_limit)
-    instance = eval_instance(settings)
+    eval_ai = replace(settings.ai, daily_call_limit=settings.ai.eval_daily_call_limit,
+                      decision_model=model or settings.ai.decision_model)
+    instance = eval_instance(settings, version)
     done = 0
 
     with db.connect() as conn:
@@ -107,9 +132,9 @@ def run_reviews(settings: Settings, n: int, sample_size: int) -> int:
                                        "long" if signal.direction == LONG else "short", signal.score, signal.reason)
             if db.has_ai_review(conn, signal_id):
                 continue
-            context = build_context(assets[signal.symbol], market_asset, signal.ts, signal.ts + step,
-                                    signal.direction, signal.reason, signal.score)
-            outcome = review_signal(conn, analyst, eval_ai, instance, signal_id, render_prompt(context))
+            context = spec.context(assets[signal.symbol], market_asset, signal.ts, signal.ts + step,
+                                   signal.direction, signal.reason, signal.score)
+            outcome = review_signal(conn, analyst, eval_ai, instance, signal_id, render_prompt(context, version=version))
             if outcome.quota_exhausted:
                 log.warning("Cuota agotada: %s. Sigue otro día con el mismo comando.", outcome.error)
                 break
@@ -192,18 +217,43 @@ def scored_reviews(settings: Settings, instance: str) -> pd.DataFrame:
                                        settings.backtest, variant.timeframe, variant.trailing_stop)
                         if ts in p.signals.index else np.nan)
     reviews["r"] = outcomes
-    reviews["size"] = [size_for(d, float(r.get("size_multiplier", 0))) for d, r in zip(reviews["decision"], reviews["response"])]
+    # v2: el tamaño es el puntaje/100 tal cual; v1: el tamaño que resulta de la decisión.
+    reviews["score"] = [r.get("score") for r in reviews["response"]]
+    reviews["size"] = [s / 100 if s is not None else size_for(d, float(r.get("size_multiplier", 0)))
+                       for s, d, r in zip(reviews["score"], reviews["decision"], reviews["response"])]
     return reviews.dropna(subset=["r"])
 
 
-def report(settings: Settings) -> int:
-    reviews = scored_reviews(settings, eval_instance(settings))
+def rank_correlation(rows: np.ndarray) -> float:
+    """Spearman entre el puntaje (columna 1) y el R (columna 0)."""
+    if len(rows) < 3 or np.std(rows[:, 1]) == 0:
+        return float("nan")
+    return float(pd.Series(rows[:, 0]).rank().corr(pd.Series(rows[:, 1]).rank()))
+
+
+def report(settings: Settings, version: str = "v1") -> int:
+    reviews = scored_reviews(settings, eval_instance(settings, version))
     if reviews.empty:
         log.info("Todavía no hay revisiones. Corre: python -m tradebot.ai_eval --n 10")
         return 0
     oos_start = pd.Timestamp(settings.backtest.oos_start, tz="UTC")
 
-    log.info("Revisiones: %d (modelo %s, prompt %s)\n", len(reviews), reviews["model"].iloc[0], PROMPT_VERSION)
+    log.info("Revisiones: %d (modelo %s, prompt %s)\n", len(reviews), reviews["model"].iloc[0], version)
+    if reviews["score"].notna().all():
+        rows = reviews[["r", "score"]].to_numpy(dtype=float)
+        blocks = pd.to_datetime(reviews["ts"], utc=True).dt.floor(BLOCK).to_numpy()
+        rho = rank_correlation(rows)
+        low, high = bootstrap_interval(rows, rank_correlation, blocks=blocks)
+        log.info("Puntaje: medio %.0f, desvío %.0f, rango %d-%d", reviews["score"].mean(), reviews["score"].std(),
+                 reviews["score"].min(), reviews["score"].max())
+        log.info("Correlación puntaje-R (Spearman): %+.3f (intervalo 90%%, por semanas: %+.3f a %+.3f)", rho, low, high)
+        log.info("-> %s\n", "El puntaje ordena las señales mejor que el azar (criterio pre-registrado cumplido)." if low > 0
+                 else "No hay evidencia de que el puntaje ordene las señales mejor que el azar.")
+        terciles = pd.qcut(reviews["score"].rank(method="first"), 3, labels=["bajo", "medio", "alto"])
+        for label, group in reviews.groupby(terciles, observed=True):
+            log.info("  tercil %-5s puntaje %3.0f-%3.0f  n=%3d  R medio %+.3f  acierto %.0f%%", label, group["score"].min(),
+                     group["score"].max(), len(group), group["r"].mean(), (group["r"] > 0).mean() * 100)
+        log.info("")
     log.info("%-10s %6s %10s %12s %10s", "decisión", "n", "R medio", "acierto", "R total")
     for decision, group in reviews.groupby("decision"):
         log.info("%-10s %6d %10.2f %11.1f%% %10.1f", decision, len(group), group["r"].mean(),
@@ -244,9 +294,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--n", type=int, default=10, help="señales a revisar en esta tanda")
     parser.add_argument("--muestra", type=int, default=SAMPLE_SIZE, help="tamaño total de la muestra fija")
     parser.add_argument("--reporte", action="store_true", help="solo mostrar resultados")
+    parser.add_argument("--prompt", choices=sorted(EVALS), default="v1", help="versión del prompt a evaluar")
+    parser.add_argument("--modelo", help="modelo de Claude (por defecto el de settings.toml)")
     args = parser.parse_args(argv)
     settings = load_settings()
-    return report(settings) if args.reporte else run_reviews(settings, args.n, args.muestra)
+    if args.reporte:
+        return report(settings, args.prompt)
+    return run_reviews(settings, args.n, args.muestra, args.prompt, args.modelo)
 
 
 if __name__ == "__main__":

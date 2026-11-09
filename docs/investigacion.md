@@ -100,6 +100,29 @@ Revisiones de solidez (sin cambiar parámetros):
 3. **SOL aporta mucho** (+40 puntos en 2021) y fue elegida en 2026, sabiendo que sobrevivió. Sin SOL sigue superando a BTC, con menos margen.
 4. La prueba que no tiene estos sesgos es el **paper trading desde ahora**.
 
+## 2026-11-09 · Prompt v2 de la IA con Opus (pre-registro)
+
+Escrito antes de correrlo. El v1 (Sonnet) dio una habilidad de +0,043 R (IC 90%: −0,009 a +0,094): una pista, no una prueba.
+
+- **Muestra nueva:** 300 rupturas frescas de donchian-4h-20 entre 2024-01-09 y 2026-11-09, sorteadas con semilla 11 entre las ~944 que **no** estaban en la muestra del v1. Así no se evalúa sobre señales ya vistas.
+- **Modelo:** Opus (`--model opus`). Un solo modelo: 1 intento nuevo (prompts acumulados: 2).
+- **Más contexto:** se agrega a lo del v1:
+  - tendencia semanal y retorno a 90 días;
+  - distancia al máximo y al mínimo de 90 días;
+  - ancho del canal roto, en ATR;
+  - cuántas veces se tocó el nivel antes de romperlo;
+  - velas desde la ruptura anterior en la misma dirección;
+  - volumen de 5 velas contra el de 20;
+  - funding de 1 día contra 30 días;
+  - percentil de volatilidad a 1 año;
+  - si BTC también está rompiendo en la misma dirección.
+  
+  Sigue sin fechas, precios absolutos ni nombres de monedas.
+- **Salida:** un puntaje de 0 a 100 (probabilidad de que la operación termine bien), no aprobar, reducir o vetar. Para medir la habilidad, el tamaño es puntaje / 100.
+- **Métrica principal:** correlación de rangos (Spearman) entre el puntaje y el R de cada señal, con intervalo del 90% por semanas completas.
+- **Criterio de éxito, fijado antes:** el límite inferior del intervalo de la correlación es mayor que 0. Métrica secundaria: habilidad de selección, como en el v1.
+- El bot en vivo sigue con el v1 hasta que esto termine.
+
 **Próximas ideas** (anotar aquí antes de probarlas):
 
 - Seguimiento de tendencia con tamaño por volatilidad, siempre en el mercado (no solo en rupturas).

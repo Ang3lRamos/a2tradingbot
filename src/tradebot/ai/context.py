@@ -92,3 +92,83 @@ def build_context(asset: AssetFrames, market: AssetFrames, ts: pd.Timestamp, dec
             "tendencia_diaria": _trend_word(market.regime.loc[:ts].iloc[-1]),
         },
     }
+
+
+# --- contexto v2: lo del v1 más lo que mira un trader antes de tomar una ruptura ---
+
+CHANNEL_BARS = 20  # el canal de donchian-4h-20
+DAYS_90 = 90 * BARS_PER_DAY_4H
+YEAR = 365 * BARS_PER_DAY_4H
+
+
+def _channel(candles: pd.DataFrame, direction: int) -> tuple[pd.Series, float]:
+    """Canal de las 20 velas anteriores a la señal y el nivel roto (máximo si es long, mínimo si es short)."""
+    prior = candles.iloc[-CHANNEL_BARS - 1:-1]
+    return prior, float(prior["high"].max() if direction == LONG else prior["low"].min())
+
+
+def _bars_since_previous_break(candles: pd.DataFrame, direction: int, limit: int = DAYS_90) -> int | None:
+    """Velas desde la última ruptura anterior en la misma dirección (sin contar la actual)."""
+    close = candles["close"]
+    if direction == LONG:
+        level = candles["high"].rolling(CHANNEL_BARS).max().shift(1)
+        broke = close > level
+    else:
+        level = candles["low"].rolling(CHANNEL_BARS).min().shift(1)
+        broke = close < level
+    previous = broke.iloc[-limit - 1:-1]
+    # Solo cuenta el inicio de cada ruptura: la vela anterior no rompía.
+    starts = previous & ~previous.shift(1, fill_value=False)
+    hits = starts[starts].index
+    return int(len(candles) - 1 - candles.index.get_loc(hits[-1])) if len(hits) else None
+
+
+def build_context_v2(asset: AssetFrames, market: AssetFrames, ts: pd.Timestamp, decision_time: pd.Timestamp,
+                     direction: int, reason: str, score: float) -> dict:
+    context = build_context(asset, market, ts, decision_time, direction, reason, score)
+    candles = asset.candles.loc[:ts]
+    features = asset.features.loc[:ts]
+    close, atr = candles["close"], float(features["atr"].iloc[-1])
+    last = float(close.iloc[-1])
+    prior, level = _channel(candles, direction)
+    tolerance = 0.25 * atr
+    touches = int(((prior["high"] >= level - tolerance) if direction == LONG else (prior["low"] <= level + tolerance)).sum())
+    window_90 = candles.iloc[-DAYS_90:]
+    weekly = close.resample("7D").last().dropna()
+    funding = asset.funding[asset.funding.index < decision_time]
+    market_candles = market.candles.loc[:ts]
+    _, market_level = _channel(market_candles, direction)
+    market_last = float(market_candles["close"].iloc[-1])
+    market_atr = float(market.features.loc[:ts, "atr"].iloc[-1])
+
+    context["marco_mayor"] = {
+        "retorno_90d_pct": _pct_return(close, DAYS_90),
+        "tendencia_semanal_cierre_vs_media_10_semanas": _trend_word(weekly.iloc[-1] - weekly.iloc[-10:].mean())
+        if len(weekly) >= 10 else None,
+        "distancia_al_maximo_90d_en_atr": round((float(window_90["high"].max()) - last) / atr, 2),
+        "distancia_al_minimo_90d_en_atr": round((last - float(window_90["low"].min())) / atr, 2),
+    }
+    context["ruptura"] = {
+        "ancho_del_canal_20_velas_en_atr": round((float(prior["high"].max()) - float(prior["low"].min())) / atr, 2),
+        "veces_que_se_toco_el_nivel_antes": touches,
+        "cierre_mas_alla_del_nivel_en_atr": round((last - level) / atr * (1 if direction == LONG else -1), 2),
+        "velas_desde_la_ruptura_anterior_misma_direccion": _bars_since_previous_break(candles, direction),
+        "volumen_5_velas_vs_20_velas": round(float(candles["volume"].iloc[-5:].mean() / candles["volume"].iloc[-20:].mean()), 2),
+    }
+    context["volatilidad_1_ano"] = {
+        "percentil_atr_pct_1_ano": _percentile_window(features["atr_pct"], YEAR),
+    }
+    context["derivados"]["funding_promedio_1d_pct_8h"] = round(float(funding.iloc[-3:].mean()) * 100, 4) if len(funding) else None
+    context["derivados"]["funding_promedio_30d_pct_8h"] = round(float(funding.iloc[-90:].mean()) * 100, 4) if len(funding) else None
+    context["mercado_general_referente"]["rompe_en_la_misma_direccion"] = bool(
+        market_last > market_level if direction == LONG else market_last < market_level)
+    context["mercado_general_referente"]["distancia_a_su_nivel_de_ruptura_en_atr"] = round(
+        (market_last - market_level) / market_atr * (1 if direction == LONG else -1), 2)
+    return context
+
+
+def _percentile_window(series: pd.Series, window: int) -> float | None:
+    values = series.dropna().iloc[-window:]
+    if len(values) < 30:
+        return None
+    return round(float((values < values.iloc[-1]).mean() * 100), 0)
