@@ -2,7 +2,7 @@
 
 Cada idea se anota **antes** de probarla, con cuántas variantes se intentan. Así se sabe cuántos intentos hubo detrás de un buen resultado: si se prueban muchas, la mejor sale bien por suerte.
 
-Intentos acumulados: **9 variantes de estrategia** (7 de rupturas en `backtest/variants.py` y 2 de tendencia) (lista fija en `backtest/variants.py`) y **2 prompts de IA** (v1 con Sonnet, v2 con Opus).
+Intentos acumulados: **9 variantes de estrategia** (7 de rupturas, lista fija en `backtest/variants.py`, y 2 de tendencia) y **2 prompts de IA** (v1 con Sonnet, v2 con Opus).
 
 ---
 
