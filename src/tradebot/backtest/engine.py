@@ -6,6 +6,8 @@ Supuestos, todos en contra del bot cuando hay duda:
 - Si la vela abre más allá del stop (gap), se sale en la apertura, no en el stop.
 - Comisión taker en entrada y salida; slippage en entradas y stops (el take profit es orden límite).
 - Los perpetuos pagan o cobran funding cada 8 h según la posición abierta.
+- Trailing stop (opcional): cuando la operación gana 1R, el stop sigue al cierre a la distancia
+  inicial y nunca retrocede. Se ajusta al cierre de la vela y aplica desde la siguiente.
 """
 
 from dataclasses import dataclass, field
@@ -27,7 +29,13 @@ class Position:
     opened_at: pd.Timestamp
     signal_score: float
     fees: float
+    risk_distance: float
     funding: float = 0.0
+
+    def trail(self, close: float) -> None:
+        if self.side * (close - self.entry) >= self.risk_distance:
+            candidate = close - self.side * self.risk_distance
+            self.stop = max(self.stop, candidate) if self.side == 1 else min(self.stop, candidate)
 
 
 @dataclass
@@ -75,8 +83,10 @@ def _exit_price(position: Position, o: float, h: float, low: float) -> tuple[flo
 
 
 def run_backtest(
-    index: pd.DatetimeIndex, data: dict[str, SymbolData], risk: RiskSettings, costs: BacktestSettings
+    index: pd.DatetimeIndex, data: dict[str, SymbolData], risk: RiskSettings, costs: BacktestSettings,
+    trailing_stop: bool = False,
 ) -> BacktestResult:
+    """`risk.take_profit_r <= 0` desactiva el take profit (la salida queda solo en el stop)."""
     cash = costs.initial_capital
     positions: dict[str, Position] = {}
     trades: list[dict] = []
@@ -126,11 +136,11 @@ def run_backtest(
                     qty = min(last_equity * risk.risk_per_trade / distance, max_qty)
                     fee = entry * qty * costs.fee_rate
                     cash -= fee
+                    take_profit = (entry + side * distance * risk.take_profit_r
+                                   if risk.take_profit_r > 0 else side * np.inf)
                     positions[symbol] = Position(
-                        symbol, side, qty, entry,
-                        stop=entry - side * distance,
-                        take_profit=entry + side * distance * risk.take_profit_r,
-                        opened_at=ts, signal_score=float(d.score[i - 1]), fees=fee,
+                        symbol, side, qty, entry, stop=entry - side * distance, take_profit=take_profit,
+                        opened_at=ts, signal_score=float(d.score[i - 1]), fees=fee, risk_distance=distance,
                     )
 
             # 2. Funding y salidas dentro de la vela.
@@ -146,6 +156,8 @@ def run_backtest(
                 if hit:
                     price, reason = hit
                     close(position, price, ts, reason, slipped=reason.startswith("stop"))
+                elif trailing_stop and not np.isnan(d.close[i]):
+                    position.trail(d.close[i])
 
         # 3. Valor de la cuenta al cierre de la vela.
         unrealized = sum(

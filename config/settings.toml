@@ -25,8 +25,11 @@ max_daily_loss = 0.02
 max_drawdown = 0.10
 
 [strategy]
-# Estrategia base: seguir la tendencia y entrar cuando termina un retroceso.
-# Long: EMA rápida > EMA lenta y el RSI cruza hacia arriba rsi_long_trigger. Short: al revés.
+# Variante activa (ver src/tradebot/backtest/variants.py). Elegida con python -m tradebot.backtest.compare:
+# ruptura de canal de 20 velas de 4h, positiva en los 4 sub-periodos in-sample y estable entre 10 y 40 velas.
+variant = "donchian-4h-20"
+# Parámetros de indicadores. Los de RSI y EMAs solo los usan las variantes "pullback":
+# tendencia por EMAs y entrada cuando el RSI cruza rsi_long_trigger (long) o rsi_short_trigger (short).
 ema_fast = 50
 ema_slow = 200
 rsi_period = 14

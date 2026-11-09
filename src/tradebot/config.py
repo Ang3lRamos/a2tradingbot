@@ -49,6 +49,7 @@ class StrategySettings:
     rsi_long_trigger: float
     rsi_short_trigger: float
     atr_period: int
+    variant: str = "pullback-1h"
 
 
 @dataclass(frozen=True)

@@ -149,3 +149,74 @@ def test_max_drawdown():
 def test_buy_and_hold_without_costs():
     equity = buy_and_hold(pd.Series([100.0, 150.0]), NO_COSTS)
     assert equity.iloc[-1] == pytest.approx(15_000)
+
+
+# --- variantes de la fase 2 ---
+
+from tradebot.backtest.compare import subperiod_returns  # noqa: E402
+from tradebot.backtest.data import resample_candles  # noqa: E402
+from tradebot.strategy import SHORT, apply_regime, daily_regime, donchian_signals  # noqa: E402
+
+
+def test_donchian_breakout_excludes_current_bar():
+    idx = hourly(6)
+    candles = pd.DataFrame({"high": [10, 11, 12, 11, 13, 9.0], "low": [9, 9, 10, 10, 11, 7.0],
+                            "close": [9.5, 10.5, 11.5, 10.5, 12.5, 7.5]}, index=idx)
+    features = pd.DataFrame({"atr": 1.0}, index=idx)
+    signals = donchian_signals(candles, features, lookback=3)
+    # Vela 4: cierre 12,5 > máximo de las velas 1-3 (12). Vela 5: cierre 7,5 < mínimo de las velas 2-4 (10).
+    assert list(signals.index) == [idx[4], idx[5]]
+    assert list(signals["direction"]) == [LONG, SHORT]
+    assert signals["score"].iloc[0] == pytest.approx(0.5)
+
+
+def test_daily_regime_uses_previous_day_only():
+    idx = pd.date_range("2024-01-01", periods=24 * 80, freq="h", tz="UTC")
+    close = pd.Series(np.linspace(100, 200, len(idx)), index=idx)
+    close.iloc[-24:] = 50.0  # el último día se desploma
+    regime = daily_regime(pd.DataFrame({"close": close}), ema_days=10)
+    # Durante el último día todavía rige la tendencia alcista del día anterior.
+    assert (regime.iloc[-24:] == 1).all()
+    assert regime.iloc[:24].isna().all()
+
+
+def test_apply_regime_keeps_only_aligned_signals():
+    idx = hourly(3)
+    signals = pd.DataFrame({"direction": [LONG, SHORT, LONG], "score": 1.0, "reason": ""}, index=idx)
+    regime = pd.Series([1.0, 1.0, -1.0], index=idx)
+    assert list(apply_regime(signals, regime).index) == [idx[0]]
+
+
+def test_resample_to_4h_drops_incomplete_last_bar():
+    idx = hourly(10)
+    candles = pd.DataFrame({"open": range(10), "high": range(1, 11), "low": range(10),
+                            "close": range(10), "volume": 1.0}, index=idx).astype(float)
+    four = resample_candles(candles, "4h")
+    assert len(four) == 2
+    assert four.iloc[0].tolist() == [0.0, 4.0, 0.0, 3.0, 4.0]
+
+
+def test_trailing_stop_locks_breakeven_after_1r():
+    # Entrada 100, stop 97 (1R = 3). Cierra en 104 (>1R): el stop sube a 101. Luego cae a 100.
+    bars = [(99, 100, 98, 100), (100, 101, 99, 100), (100, 104.5, 99.5, 104), (103, 103.5, 100, 100.5)]
+    risk = RiskSettings(**{**RISK.__dict__, "take_profit_r": 0})
+    result = run_backtest(hourly(4), {"X": symbol_data(bars, {0: LONG})}, risk, NO_COSTS, trailing_stop=True)
+    trade = result.trades.iloc[0]
+    assert (trade["exit"], trade["exit_reason"]) == (101, "stop")
+    assert trade["net_pnl"] > 0
+
+
+def test_subperiod_returns_compound_to_total():
+    equity = pd.Series([100.0, 110, 99, 120, 150, 140, 168, 160])
+    parts = subperiod_returns(equity, 4)
+    assert len(parts) == 4
+    assert np.prod([1 + p for p in parts]) == pytest.approx(160 / 100)
+
+
+def test_sharpe_does_not_depend_on_bar_size():
+    from tradebot.backtest.metrics import sharpe
+
+    rng = np.random.default_rng(1)
+    hourly_returns = pd.Series(rng.normal(0.0001, 0.01, 24 * 365 * 2), index=hourly(24 * 365 * 2))
+    four_hour = (1 + hourly_returns).resample("4h").prod() - 1
+    assert sharpe(four_hour) == pytest.approx(sharpe(hourly_returns), rel=0.15)

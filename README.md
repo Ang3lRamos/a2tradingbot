@@ -14,7 +14,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 
 - [x] Fase 0: configuración, esquema de base de datos, conexión a testnet y a Claude
 - [x] Fase 1: ingesta de datos
-- [ ] Fase 2: estrategia base y backtest (motor listo; la primera estrategia no supera a comprar y mantener)
+- [ ] Fase 2: estrategia base y backtest (variante elegida: donchian-4h-20; falta la evaluación out-of-sample)
 - [ ] Fase 3: analista IA
 - [ ] Fase 4: riesgo y ejecución
 - [ ] Fase 5: paper trading y dashboard (Streamlit)
@@ -55,6 +55,7 @@ Guarda velas cerradas en `candles` y contexto en `market_context`: funding rate 
 ```bash
 python -m tradebot.backtest                    # periodo in-sample, para desarrollar
 python -m tradebot.backtest --sin-kill-switch  # diagnóstico: la estrategia en todo el periodo
+python -m tradebot.backtest.compare            # compara todas las variantes en 4 sub-periodos
 python -m tradebot.backtest --period oos        # evaluación final, una sola vez
 ```
 
