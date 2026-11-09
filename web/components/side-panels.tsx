@@ -5,7 +5,7 @@ import { Empty, Panel, Stat } from "./panel";
 
 export function AccountPanel({ live, state }: { live: Live | null; state: BotState | null }) {
   return (
-    <Panel title="Cuenta" aside="Binance Demo">
+    <Panel title="Cuenta · rupturas" aside="Binance Demo">
       <div className="grid grid-cols-2 [&>*]:border-line [&>*:nth-child(odd)]:border-r [&>*:nth-child(-n+2)]:border-b">
         <Stat label="Capital" value={num(live?.capital_actual)} sub="USDT" />
         <Stat label="Días en papel" value={num(live?.dias_en_papel, 1)} sub="meta: 30" />
@@ -22,7 +22,7 @@ export function AccountPanel({ live, state }: { live: Live | null; state: BotSta
 export function PositionsPanel({ live }: { live: Live | null }) {
   const open = live?.posiciones_abiertas ?? [];
   return (
-    <Panel title="Posiciones" aside={`${open.length} abiertas`}>
+    <Panel title="Posiciones · rupturas" aside={`${open.length} abiertas`}>
       {open.length === 0 ? (
         <Empty>Sin posiciones abiertas.</Empty>
       ) : (

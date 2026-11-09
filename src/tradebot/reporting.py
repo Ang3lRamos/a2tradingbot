@@ -102,8 +102,9 @@ def markets(settings: Settings) -> list[dict]:
 
 # --- en vivo ---
 
-def _equity_vs_btc(settings: Settings) -> pd.DataFrame:
-    rows = _query("select ts, equity from equity_snapshots where instance = %s order by ts", (settings.bot.instance,))
+def _equity_vs_btc(settings: Settings, instance: str | None = None) -> pd.DataFrame:
+    rows = _query("select ts, equity from equity_snapshots where instance = %s order by ts",
+                  (instance or settings.bot.instance,))
     if not rows:
         return pd.DataFrame(columns=["equity", "btc"])
     equity = pd.DataFrame(rows, columns=["ts", "equity"]).astype({"equity": float})
@@ -151,6 +152,39 @@ def live(settings: Settings) -> dict:
         "posiciones_abiertas": positions[positions["estado"] == "open"].to_dict("records"),
         "operaciones_cerradas": closed.to_dict("records"),
         "alertas": [{"fecha": a[0], "nivel": a[1], "mensaje": a[2]} for a in alerts],
+    })
+
+
+# --- bot de tendencia (cuenta virtual) ---
+
+def trend(settings: Settings) -> dict | None:
+    instance = settings.trend.instance
+    account = _query("select cash, last_day from paper_accounts where instance = %s", (instance,))
+    if not account:
+        return None
+    cash, last_day = float(account[0][0]), account[0][1]
+    holdings = [(s, float(q)) for s, q in _query("select symbol, qty from paper_holdings where instance = %s", (instance,))]
+    # Valoración al último cierre de 1h: el capital se mueve entre rebalanceos aunque no se opere.
+    prices = {s: float(_query("select close from candles where symbol = %s and timeframe = %s order by ts desc limit 1",
+                              (s, settings.bot.timeframe))[0][0]) for s, _ in holdings}
+    equity = cash + sum(q * prices[s] for s, q in holdings)
+    curves = _equity_vs_btc(settings, instance)
+    trades = _query("select ts, symbol, qty, price, cost, weight_before, weight_after from paper_trades "
+                    "where instance = %s order by ts desc, symbol limit 60", (instance,))
+    has_curve = len(curves) > 1
+    return clean({
+        "instancia": instance,
+        "capital_inicial": settings.trend.initial_capital,
+        "capital_actual": equity,
+        "ultimo_dia": last_day.isoformat() if last_day else None,
+        "curva": curve_points(curves) if len(curves) else [],
+        "metricas_bot": summarize(curves["equity"], pd.DataFrame()) if has_curve else None,
+        "metricas_btc": summarize(curves["btc"], pd.DataFrame()) if has_curve else None,
+        "dias_en_papel": (curves.index[-1] - curves.index[0]).total_seconds() / 86400 if len(curves) else 0,
+        "pesos": [{"simbolo": s, "cantidad": q, "valor": q * prices[s], "peso": q * prices[s] / equity}
+                  for s, q in sorted(holdings)],
+        "operaciones": [{"fecha": t[0], "simbolo": t[1], "cantidad": float(t[2]), "precio": float(t[3]),
+                         "costo": float(t[4]), "peso_antes": float(t[5]), "peso_despues": float(t[6])} for t in trades],
     })
 
 

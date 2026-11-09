@@ -7,18 +7,19 @@ import {
 } from "recharts";
 
 import { num, pct, tone, utc } from "@/lib/format";
-import type { Backtest, CurvePoint, Live, Metrics } from "@/lib/types";
+import type { Backtest, CurvePoint, Live, Metrics, Trend } from "@/lib/types";
 
 import { Empty, Stat } from "./panel";
 
-type View = "vivo" | "is" | "oos";
+type View = "vivo" | "tend" | "is" | "oos";
 const SERIES = [
   { key: "bot", label: "Bot", color: "var(--series-bot)" },
   { key: "btc", label: "Comprar y mantener BTC", color: "var(--series-btc)" },
 ] as const;
 
-export function EquityPanel({ live, backtestIs, backtestOos }: {
+export function EquityPanel({ live, trend, backtestIs, backtestOos }: {
   live: Live | null;
+  trend: Trend | null;
   backtestIs: Backtest | null;
   backtestOos: Backtest | null;
 }) {
@@ -29,6 +30,9 @@ export function EquityPanel({ live, backtestIs, backtestOos }: {
   const source = view === "vivo"
     ? { curve: live?.curva ?? [], bot: live?.metricas_bot, btc: live?.metricas_btc,
         note: `${num(live?.dias_en_papel, 1)} días en papel` }
+    : view === "tend"
+    ? { curve: trend?.curva ?? [], bot: trend?.metricas_bot, btc: trend?.metricas_btc,
+        note: `${num(trend?.dias_en_papel, 1)} días · cuenta virtual` }
     : (() => {
         const b = view === "is" ? backtestIs : backtestOos;
         return { curve: b?.curva ?? [], bot: b?.metricas_bot, btc: b?.metricas_btc,
@@ -40,7 +44,7 @@ export function EquityPanel({ live, backtestIs, backtestOos }: {
       <header className="flex h-8 shrink-0 items-center gap-3 border-b border-line px-3">
         <h2 className="text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted">Capital</h2>
         <div role="tablist" className="flex h-full min-w-0 items-stretch overflow-x-auto">
-          {([["vivo", "En vivo"], ["is", "Backtest IS"], ["oos", "Backtest OOS"]] as const).map(([key, label]) => (
+          {([["vivo", "Rupturas"], ["tend", "Tendencia L/S"], ["is", "Backtest IS"], ["oos", "Backtest OOS"]] as const).map(([key, label]) => (
             <button key={key} role="tab" aria-selected={view === key} onClick={() => setView(key)}
               className={`shrink-0 whitespace-nowrap border-b-2 px-2.5 text-[12px] transition-colors ${view === key ? "border-series-bot text-ink" : "border-transparent text-ink-muted hover:text-ink"}`}>
               {label}
@@ -67,7 +71,7 @@ export function EquityPanel({ live, backtestIs, backtestOos }: {
       <div className="h-[340px] px-1 pb-2">
         {source.curve.length < 2 ? (
           <Empty>
-            {view === "vivo"
+            {view === "vivo" || view === "tend"
               ? "La curva aparece cuando el bot acumule ciclos: registra el capital una vez por hora."
               : "Sin datos de backtest publicados."}
           </Empty>

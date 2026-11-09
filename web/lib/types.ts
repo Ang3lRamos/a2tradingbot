@@ -70,7 +70,28 @@ export type Live = {
   alertas: Alert[];
 };
 
-export type Summary = { estado: BotState; mercados: Market[]; vivo: Live };
+export type TrendWeight = { simbolo: string; cantidad: number; valor: number; peso: number };
+
+export type TrendTrade = {
+  fecha: string; simbolo: string; cantidad: number; precio: number; costo: number;
+  peso_antes: number; peso_despues: number;
+};
+
+/** Bot de tendencia largo/corto en cuenta virtual: rebalancea a diario, sin órdenes en el exchange. */
+export type Trend = {
+  instancia: string;
+  capital_inicial: number;
+  capital_actual: number;
+  ultimo_dia: string | null;
+  curva: CurvePoint[];
+  metricas_bot: Metrics | null;
+  metricas_btc: Metrics | null;
+  dias_en_papel: number;
+  pesos: TrendWeight[];
+  operaciones: TrendTrade[];
+};
+
+export type Summary = { estado: BotState; mercados: Market[]; vivo: Live; tendencia?: Trend | null };
 
 export type AiSummary = {
   revisadas: number;

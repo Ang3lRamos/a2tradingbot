@@ -4,6 +4,8 @@ Uso:
     python -m tradebot.run            # corre indefinidamente, a los 2 minutos de cada hora (UTC)
     python -m tradebot.run --once     # un solo ciclo y termina
     python -m tradebot.run --reanudar # quita el kill switch o el modo solo cierre después de revisar a mano
+
+Además, a las 00:15 UTC corre el bot de tendencia en su cuenta virtual (tradebot.live.trend_paper).
 """
 
 import argparse
@@ -21,6 +23,8 @@ from tradebot.config import Settings, load_exchange_credentials, load_settings
 from tradebot.exchange import create_exchange
 from tradebot.live.cycle import Cycle, Snapshot
 from tradebot.live.store import LiveStore
+from tradebot.live.trend_paper import mark_to_market
+from tradebot.live.trend_paper import run_and_notify as run_trend
 from tradebot.notify import create_notifier
 from tradebot.publish import publish
 
@@ -47,6 +51,10 @@ def run_once(settings: Settings) -> int:
         return 1
     log.info("ciclo terminado: %d eventos", len(events))
     try:
+        mark_to_market(settings)
+    except Exception:  # noqa: BLE001 - la cuenta virtual no debe tumbar el ciclo real
+        log.exception("no se pudo valorar la cuenta de tendencia")
+    try:
         # Datos para el dashboard web. Si falla, el bot sigue: solo el dashboard queda desactualizado.
         log.info("dashboard: publicado %s", ", ".join(publish(settings)))
     except Exception:  # noqa: BLE001 - nada del dashboard debe tumbar el ciclo
@@ -62,6 +70,15 @@ def _cycle(settings: Settings, notifier) -> list[str]:
         broker = CCXTBroker(create_exchange(settings.bot, load_exchange_credentials(settings.bot.exchange)),
                             settings.bot.quote)
         return Cycle(settings, store, broker, create_analyst(settings.ai), notifier).run(load_snapshot(settings))
+
+
+def run_trend_and_publish(settings: Settings) -> int:
+    status = run_trend(settings)
+    try:
+        publish(settings)
+    except Exception:  # noqa: BLE001 - el dashboard es secundario
+        log.exception("no se pudieron publicar los datos del dashboard")
+    return status
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -82,7 +99,9 @@ def main(argv: list[str] | None = None) -> int:
 
     scheduler = BlockingScheduler(timezone="UTC")
     scheduler.add_job(run_once, "cron", minute=2, args=[settings], max_instances=1, coalesce=True)
-    log.info("bot en marcha: un ciclo a los 2 minutos de cada hora (UTC). Ctrl+C para detener.")
+    # Después de la ingesta de las 00:02, que trae la última vela de 1h del día.
+    scheduler.add_job(run_trend_and_publish, "cron", hour=0, minute=15, args=[settings], max_instances=1, coalesce=True)
+    log.info("bot en marcha: un ciclo a los 2 minutos de cada hora y tendencia a las 00:15 (UTC). Ctrl+C para detener.")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

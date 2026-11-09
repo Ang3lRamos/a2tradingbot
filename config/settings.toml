@@ -49,3 +49,10 @@ slippage = 0.0002      # 0,02% en contra en cada entrada y salida a mercado
 oos_start = "2025-11-09"
 # Inicio del in-sample con el que se eligió la estrategia (primera vela de entonces + 60 días de calentamiento).
 is_start = "2024-01-09T06:00:00+00:00"
+
+[trend]
+# Tendencia largo/corto con tamaño por volatilidad, en una cuenta virtual (no manda órdenes al exchange:
+# la cuenta demo es de una posición por moneda y chocaría con el bot de rupturas). Rebalancea a diario.
+instance = "tendencia-ls"
+initial_capital = 5000
+long_only = false

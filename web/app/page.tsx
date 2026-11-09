@@ -5,6 +5,7 @@ import { EquityPanel } from "@/components/equity-panel";
 import { Markets } from "@/components/markets";
 import { AccountPanel, AiPanel, PositionsPanel } from "@/components/side-panels";
 import { StatusBar } from "@/components/status-bar";
+import { TrendPanel } from "@/components/trend-panel";
 import { getDashboardData } from "@/lib/data";
 
 export default function Page() {
@@ -39,12 +40,13 @@ async function Dashboard() {
 
         {/* En celular el capital va primero. */}
         <div className="order-first flex min-w-0 flex-col gap-px bg-line lg:order-none [&>*:last-child]:flex-1">
-          <EquityPanel live={live} backtestIs={data.backtest_is} backtestOos={data.backtest_oos} />
+          <EquityPanel live={live} trend={data.resumen?.tendencia ?? null} backtestIs={data.backtest_is} backtestOos={data.backtest_oos} />
           <BottomTabs live={live} backtestIs={data.backtest_is} backtestOos={data.backtest_oos} />
         </div>
 
         <div className="flex min-w-0 flex-col gap-px bg-line [&>*:last-child]:flex-1">
           <PositionsPanel live={live} />
+          <TrendPanel trend={data.resumen?.tendencia} />
           <AiPanel ai={data.ia} />
         </div>
       </main>

@@ -67,12 +67,21 @@ class BacktestSettings:
 
 
 @dataclass(frozen=True)
+class TrendSettings:
+    """Bot de tendencia en cuenta virtual (ver docs/investigacion.md)."""
+    instance: str = "tendencia-ls"
+    initial_capital: float = 5000.0
+    long_only: bool = False
+
+
+@dataclass(frozen=True)
 class Settings:
     bot: BotSettings
     ai: AISettings
     risk: RiskSettings
     strategy: StrategySettings
     backtest: BacktestSettings
+    trend: TrendSettings = TrendSettings()
 
 
 @dataclass(frozen=True)
@@ -89,6 +98,7 @@ def load_settings(path: Path = DEFAULT_SETTINGS_PATH) -> Settings:
         risk=RiskSettings(**raw["risk"]),
         strategy=StrategySettings(**raw["strategy"]),
         backtest=BacktestSettings(**raw["backtest"]),
+        trend=TrendSettings(**raw.get("trend", {})),
     )
     if settings.bot.exchange not in ("bybit", "binance"):
         raise ValueError(f"exchange no soportado: {settings.bot.exchange}")

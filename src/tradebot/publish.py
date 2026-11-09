@@ -51,7 +51,8 @@ def publish(settings: Settings, everything: bool = False) -> list[str]:
     jobs = {
         "resumen": lambda: reporting.clean({"estado": reporting.bot_state(settings),
                                             "mercados": reporting.markets(settings),
-                                            "vivo": reporting.live(settings)}),
+                                            "vivo": reporting.live(settings),
+                                            "tendencia": reporting.trend(settings)}),
         "ia": lambda: reporting.ai(settings),
         "backtest_is": lambda: reporting.backtest(settings, "is"),
         "backtest_oos": lambda: reporting.backtest(settings, "oos"),
