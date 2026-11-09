@@ -184,7 +184,9 @@ class Cycle:
             review = review_signal(self.store.conn, self.analyst, self.settings.ai, self.settings.bot.instance,
                                    signal_id, render_prompt(context))
             if review.size_multiplier <= 0:
-                self._event("info", f"{symbol}: señal {side} vetada ({review.decision}{', ' + review.error if review.error else ''})")
+                # Un veto por error (Claude sin sesión, timeout, tope diario) se avisa: si se repite, el bot no opera.
+                self._event("warning" if review.error else "info",
+                            f"{symbol}: señal {side} vetada ({review.decision}{', ' + review.error if review.error else ''})")
                 continue
             atr = float(asset.features.loc[bar, "atr"])
             self.open_position(symbol, side, asset, bar, atr, review.size_multiplier, signal_id)

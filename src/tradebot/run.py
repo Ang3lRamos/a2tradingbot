@@ -10,14 +10,12 @@ import argparse
 import logging
 import sys
 
-import ccxt
 import psycopg
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from tradebot import db, ingest
 from tradebot.ai import create_analyst
 from tradebot.ai_eval import load_universe
-from tradebot.broker.base import BrokerError
 from tradebot.broker.ccxt_broker import CCXTBroker
 from tradebot.config import Settings, load_exchange_credentials, load_settings
 from tradebot.exchange import create_exchange
@@ -35,21 +33,18 @@ def load_snapshot(settings: Settings) -> Snapshot:
 
 
 def run_once(settings: Settings) -> int:
-    if ingest.main([]) != 0:
-        log.warning("la ingesta tuvo fallas; el ciclo sigue con los datos disponibles")
     notifier = create_notifier(prefix=f"[{settings.bot.instance}] ")
-    with db.connect() as conn:
-        store = LiveStore(conn, settings.bot.instance)
+    try:
+        events = _cycle(settings, notifier)
+    except Exception as exc:  # noqa: BLE001 - cualquier fallo del ciclo se avisa; el scheduler sigue
+        log.exception("el ciclo falló")
+        notifier.send("critical", f"el ciclo falló: {type(exc).__name__}: {str(exc)[:300]}")
         try:
-            broker = CCXTBroker(create_exchange(settings.bot, load_exchange_credentials(settings.bot.exchange)),
-                                settings.bot.quote)
-            events = Cycle(settings, store, broker, create_analyst(settings.ai), notifier).run(load_snapshot(settings))
-        except (BrokerError, ccxt.BaseError, psycopg.Error, OSError) as exc:
-            conn.rollback()
-            store.alert("critical", f"el ciclo falló: {exc}")
-            notifier.send("critical", f"el ciclo falló: {type(exc).__name__}: {str(exc)[:300]}")
-            log.exception("el ciclo falló")
-            return 1
+            with db.connect() as conn:
+                LiveStore(conn, settings.bot.instance).alert("critical", f"el ciclo falló: {exc}")
+        except psycopg.Error:
+            log.exception("tampoco se pudo guardar la alerta (¿base caída?)")
+        return 1
     log.info("ciclo terminado: %d eventos", len(events))
     try:
         # Datos para el dashboard web. Si falla, el bot sigue: solo el dashboard queda desactualizado.
@@ -57,6 +52,16 @@ def run_once(settings: Settings) -> int:
     except Exception:  # noqa: BLE001 - nada del dashboard debe tumbar el ciclo
         log.exception("no se pudieron publicar los datos del dashboard")
     return 0
+
+
+def _cycle(settings: Settings, notifier) -> list[str]:
+    if ingest.main([]) != 0:
+        log.warning("la ingesta tuvo fallas; el ciclo sigue con los datos disponibles")
+    with db.connect() as conn:
+        store = LiveStore(conn, settings.bot.instance)
+        broker = CCXTBroker(create_exchange(settings.bot, load_exchange_credentials(settings.bot.exchange)),
+                            settings.bot.quote)
+        return Cycle(settings, store, broker, create_analyst(settings.ai), notifier).run(load_snapshot(settings))
 
 
 def main(argv: list[str] | None = None) -> int:
