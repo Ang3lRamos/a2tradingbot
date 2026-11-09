@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -220,3 +222,14 @@ def test_sharpe_does_not_depend_on_bar_size():
     hourly_returns = pd.Series(rng.normal(0.0001, 0.01, 24 * 365 * 2), index=hourly(24 * 365 * 2))
     four_hour = (1 + hourly_returns).resample("4h").prod() - 1
     assert sharpe(four_hour) == pytest.approx(sharpe(hourly_returns), rel=0.15)
+
+
+def test_r_multiple_uses_initial_risk_after_trailing():
+    # Entrada 100, stop inicial 97 (riesgo 3). Cierra en 112: el stop sube a 109 y salta en la vela siguiente.
+    # El R se mide contra el riesgo inicial (9 / 3 = 3), no contra la distancia al stop ya movido.
+    bars = [(99, 100, 98, 100), (100, 112, 99.5, 112), (111, 111, 105, 106)]
+    no_tp = replace(RISK, take_profit_r=0)
+    result = run_backtest(hourly(3), {"X": symbol_data(bars, {0: LONG})}, no_tp, NO_COSTS, trailing_stop=True)
+    trade = result.trades.iloc[0]
+    assert trade["exit"] == pytest.approx(109)
+    assert trade["r_multiple"] == pytest.approx(3.0)

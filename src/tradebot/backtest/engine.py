@@ -105,7 +105,7 @@ def run_backtest(
         fee = price * position.qty * costs.fee_rate
         gross = position.side * position.qty * (price - position.entry)
         cash += gross - fee
-        risk_amount = abs(position.entry - position.stop) * position.qty
+        risk_amount = position.risk_distance * position.qty  # riesgo inicial: el stop puede haberse movido
         net = gross - fee - position.fees - position.funding
         trades.append({
             "symbol": position.symbol, "side": "long" if position.side == 1 else "short",

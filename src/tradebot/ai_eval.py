@@ -32,6 +32,8 @@ from tradebot.strategy import LONG, daily_regime
 
 log = logging.getLogger("tradebot.ai_eval")
 SAMPLE_SEED = 7
+SAMPLE_SIZE = 300
+
 # Fecha de corte fija: si la muestra creciera con datos nuevos, cambiaría qué señales se eligen.
 SAMPLE_END = pd.Timestamp("2026-11-09", tz="UTC")
 
@@ -223,7 +225,8 @@ def report(settings: Settings) -> int:
     elif high < 0:
         log.info("-> La IA elige peor que el azar con evidencia estadística en esta muestra.")
     else:
-        log.info("-> Todavía no se distingue la habilidad de la IA del azar: hacen falta más revisiones.")
+        log.info("-> No se distingue la habilidad de la IA del azar en esta muestra%s.",
+                 "" if len(reviews) >= SAMPLE_SIZE else ": faltan revisiones para completarla")
 
     for label, part in (("in-sample", reviews[reviews["ts"] < oos_start]), ("out-of-sample", reviews[reviews["ts"] >= oos_start])):
         if len(part):
@@ -238,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Evaluación del analista IA sobre señales históricas")
     parser.add_argument("--n", type=int, default=10, help="señales a revisar en esta tanda")
-    parser.add_argument("--muestra", type=int, default=300, help="tamaño total de la muestra fija")
+    parser.add_argument("--muestra", type=int, default=SAMPLE_SIZE, help="tamaño total de la muestra fija")
     parser.add_argument("--reporte", action="store_true", help="solo mostrar resultados")
     args = parser.parse_args(argv)
     settings = load_settings()

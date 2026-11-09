@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from tradebot import db
-from tradebot.ai_eval import eval_instance, scored_reviews, selection_r, selection_skill, skill_interval
+from tradebot.ai_eval import SAMPLE_SIZE, eval_instance, scored_reviews, selection_r, selection_skill, skill_interval
 from tradebot.backtest.data import load_market
 from tradebot.backtest.metrics import buy_and_hold, summarize
 from tradebot.backtest.variants import build_variants, run_variant
@@ -179,7 +179,7 @@ def _ai_summary(reviews: pd.DataFrame) -> dict | None:
 def ai(settings: Settings) -> dict:
     return clean({
         "evaluacion": _ai_summary(scored_reviews(settings, eval_instance(settings))),
-        "muestra": 300,
+        "muestra": SAMPLE_SIZE,
         "en_vivo": _ai_summary(scored_reviews(settings, settings.bot.instance)),
     })
 
