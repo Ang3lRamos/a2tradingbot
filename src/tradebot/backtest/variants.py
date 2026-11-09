@@ -90,6 +90,8 @@ def run_variant(variant: Variant, market: dict[str, MarketData], settings: Setti
 
     all_candles = [candles for candles, *_ in prepared.values()]
     start = min(c.index[0] for c in all_candles) + WARMUP
+    if settings.backtest.is_start:
+        start = max(start, pd.Timestamp(settings.backtest.is_start))
     oos_start = pd.Timestamp(settings.backtest.oos_start, tz="UTC")
     index = period_index(common_index(all_candles), start, oos_start, period)
 

@@ -35,6 +35,7 @@ SAMPLE_SEED = 7
 SAMPLE_SIZE = 300
 
 # Fecha de corte fija: si la muestra creciera con datos nuevos, cambiaría qué señales se eligen.
+SAMPLE_START = pd.Timestamp("2024-01-09 06:00", tz="UTC")
 SAMPLE_END = pd.Timestamp("2026-11-09", tz="UTC")
 
 
@@ -78,7 +79,7 @@ def load_universe(settings: Settings):
         symbol: AssetFrames(p.candles, p.features, daily_regime(p.candles), p.funding, fear_greed[symbol])
         for symbol, p in prepared.items()
     }
-    start = min(p.candles.index[0] for p in prepared.values()) + WARMUP
+    start = max(min(p.candles.index[0] for p in prepared.values()) + WARMUP, SAMPLE_START)
     signals = [
         SampledSignal(symbol, ts, int(row.direction), float(row.score), row.reason)
         for symbol, p in prepared.items()

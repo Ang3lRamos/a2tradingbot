@@ -15,7 +15,7 @@ decision_model = "sonnet"
 # Por debajo del límite de tu plan, para dejar margen a tu uso normal de Claude.
 daily_call_limit = 40
 # Tope aparte para las tandas de `python -m tradebot.ai_eval`; no le quita cupo al bot en vivo.
-eval_daily_call_limit = 250
+eval_daily_call_limit = 300
 timeout_seconds = 180
 # Si la IA falla o se agota la cuota: "veto" (no operar la señal) o "base" (operarla sin revisión).
 fallback = "veto"
@@ -47,3 +47,5 @@ fee_rate = 0.0005      # comisión taker de futuros en Binance (0,05%) por lado
 slippage = 0.0002      # 0,02% en contra en cada entrada y salida a mercado
 # Desde esta fecha los datos son out-of-sample: no se miran hasta la evaluación final.
 oos_start = "2025-11-09"
+# Inicio del in-sample con el que se eligió la estrategia (primera vela de entonces + 60 días de calentamiento).
+is_start = "2024-01-09T06:00:00+00:00"

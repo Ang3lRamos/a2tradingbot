@@ -61,6 +61,9 @@ class BacktestSettings:
     fee_rate: float
     slippage: float
     oos_start: str
+    # Inicio del periodo in-sample. Fijo para que agregar historia vieja no cambie los resultados ya
+    # documentados; vacío = desde la primera vela disponible (más el calentamiento).
+    is_start: str = ""
 
 
 @dataclass(frozen=True)
