@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { ago } from "@/lib/format";
 
 // El bot corre un ciclo por hora: sin ciclo en 75 minutos se considera caído.
 const ALIVE_MINUTES = 75;
+const TICK_MS = 30_000;
+
+// Reloj como fuente externa: cambia cada 30 s (el valor es estable dentro de cada tramo).
+function subscribe(onTick: () => void) {
+  const timer = setInterval(onTick, TICK_MS);
+  return () => clearInterval(timer);
+}
+const clientNow = () => Math.floor(Date.now() / TICK_MS) * TICK_MS;
+const serverNow = () => null; // en el servidor no se sabe cuándo lo verá el usuario
 
 /** Estado del bot calculado en el navegador: los datos publicados no saben cuánto tiempo pasó desde entonces. */
 export function Heartbeat({ lastCycle }: { lastCycle: string | null | undefined }) {
-  const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useSyncExternalStore(subscribe, clientNow, serverNow);
 
   if (now === null) return <span className="text-ink-faint">…</span>;
   const minutes = lastCycle ? (now - new Date(lastCycle).getTime()) / 60_000 : null;
