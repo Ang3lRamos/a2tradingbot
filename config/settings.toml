@@ -17,7 +17,7 @@ daily_call_limit = 40
 timeout_seconds = 180
 
 [risk]
-risk_per_trade = 0.005
+risk_per_trade = 0.003   # 0,3%: con 0,5% el drawdown in-sample (11,8%) activaba el kill switch del 10%
 stop_atr_multiple = 1.5
 take_profit_r = 2.0
 max_open_positions = 3

@@ -14,7 +14,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 
 - [x] Fase 0: configuración, esquema de base de datos, conexión a testnet y a Claude
 - [x] Fase 1: ingesta de datos
-- [ ] Fase 2: estrategia base y backtest (variante elegida: donchian-4h-20; falta la evaluación out-of-sample)
+- [ ] Fase 2: estrategia base y backtest (sin ventaja out-of-sample; ver docs/resultados_fase2.md)
 - [ ] Fase 3: analista IA
 - [ ] Fase 4: riesgo y ejecución
 - [ ] Fase 5: paper trading y dashboard (Streamlit)
