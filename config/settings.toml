@@ -1,0 +1,25 @@
+[bot]
+# Una instancia = una combinación de exchange y mercado. En la fase 5 se puede correr una segunda.
+instance = "bybit-perp"
+exchange = "bybit"        # "bybit" o "binance"
+market_type = "swap"      # "spot" (solo long) o "swap" (perpetuos, long y short)
+quote = "USDT"
+bases = ["BTC", "ETH", "SOL"]
+timeframe = "1h"
+
+[ai]
+# "cli" usa tu suscripción vía claude -p. Más adelante "api" usará la API de Anthropic.
+provider = "cli"
+filter_model = "haiku"
+decision_model = "sonnet"
+# Por debajo del límite de tu plan, para dejar margen a tu uso normal de Claude.
+daily_call_limit = 40
+timeout_seconds = 180
+
+[risk]
+risk_per_trade = 0.005
+stop_atr_multiple = 1.5
+take_profit_r = 2.0
+max_open_positions = 3
+max_daily_loss = 0.02
+max_drawdown = 0.10

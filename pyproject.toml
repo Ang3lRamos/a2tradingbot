@@ -1,0 +1,24 @@
+[project]
+name = "tradebot"
+version = "0.1.0"
+description = "Bot de trading de cripto en papel con un analista de IA (Claude) y benchmark contra comprar y mantener BTC"
+requires-python = ">=3.12"
+dependencies = [
+    "ccxt==4.5.92",
+    "pydantic==2.13.5",
+    "python-dotenv==1.2.3",
+    "psycopg[binary]==3.3.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
