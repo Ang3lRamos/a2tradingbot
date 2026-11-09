@@ -105,7 +105,7 @@ def run_reviews(settings: Settings, n: int, sample_size: int) -> int:
                 continue
             context = build_context(assets[signal.symbol], market_asset, signal.ts, signal.ts + step,
                                     signal.direction, signal.reason, signal.score)
-            outcome = review_signal(conn, analyst, settings.ai, settings.bot.instance, signal_id, render_prompt(context))
+            outcome = review_signal(conn, analyst, settings.ai, instance, signal_id, render_prompt(context))
             if outcome.quota_exhausted:
                 log.warning("Cuota agotada: %s. Sigue otro día con el mismo comando.", outcome.error)
                 break
