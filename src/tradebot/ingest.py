@@ -24,6 +24,7 @@ from tradebot.config import load_settings
 from tradebot.data.candles import fetch_closed_candles, timeframe_ms
 from tradebot.data.context import DAY_MS, HOUR_MS, fetch_fear_greed, fetch_funding_rates, fetch_open_interest
 from tradebot.data.paginate import to_datetime, to_ms
+from tradebot.features.indicators import compute_features
 from tradebot.exchange import create_market_data_exchange, market_symbol
 
 log = logging.getLogger("tradebot.ingest")
@@ -45,6 +46,18 @@ def ingest_candles(conn, exchange, symbol: str, timeframe: str, since_ms: int, n
         total += db.save_candles(conn, symbol, timeframe, page)
         log.info("  %s %s: %d velas, hasta %s", symbol, timeframe, total, to_datetime(int(page[-1][0])))
     return f"{total} velas nuevas"
+
+
+def ingest_features(conn, symbol: str, timeframe: str, strategy, step_ms: int) -> str:
+    """Recalcula sobre toda la serie (las EMAs dependen de todo el historial) y guarda solo lo nuevo."""
+    candles = db.load_candles(conn, symbol, timeframe)
+    if candles.empty:
+        return "sin velas"
+    features = compute_features(candles, strategy)
+    last = db.last_features_ts(conn, symbol, timeframe)
+    if last is not None:
+        features = features[features.index > last]
+    return f"{db.save_features(conn, symbol, timeframe, features)} filas nuevas"
 
 
 def ingest_points(conn, symbol: str, column: str, pages) -> str:
@@ -72,7 +85,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args(argv)
-    bot = load_settings().bot
+    settings = load_settings()
+    bot = settings.bot
     now_ms = int(time.time() * 1000)
     default_ms = now_ms - int(args.years * 365 * DAY_MS)
     forced_ms = to_ms(args.since.replace(tzinfo=args.since.tzinfo or UTC)) if args.since else None
@@ -91,6 +105,9 @@ def main(argv: list[str] | None = None) -> int:
             since = start_ms(db.last_candle_ts(conn, symbol, bot.timeframe), step, default_ms, forced_ms)
             results.append(run_step(conn, f"{symbol} velas {bot.timeframe}",
                 lambda: ingest_candles(conn, candles_exchange, symbol, bot.timeframe, since, now_ms)))
+
+            results.append(run_step(conn, f"{symbol} indicadores",
+                lambda: ingest_features(conn, symbol, bot.timeframe, settings.strategy, step)))
 
             since = start_ms(db.last_context_ts(conn, symbol, "funding_rate"), 1, default_ms, forced_ms)
             results.append(run_step(conn, f"{symbol} funding",

@@ -42,10 +42,30 @@ class RiskSettings:
 
 
 @dataclass(frozen=True)
+class StrategySettings:
+    ema_fast: int
+    ema_slow: int
+    rsi_period: int
+    rsi_long_trigger: float
+    rsi_short_trigger: float
+    atr_period: int
+
+
+@dataclass(frozen=True)
+class BacktestSettings:
+    initial_capital: float
+    fee_rate: float
+    slippage: float
+    oos_start: str
+
+
+@dataclass(frozen=True)
 class Settings:
     bot: BotSettings
     ai: AISettings
     risk: RiskSettings
+    strategy: StrategySettings
+    backtest: BacktestSettings
 
 
 @dataclass(frozen=True)
@@ -60,6 +80,8 @@ def load_settings(path: Path = DEFAULT_SETTINGS_PATH) -> Settings:
         bot=BotSettings(**raw["bot"]),
         ai=AISettings(**raw["ai"]),
         risk=RiskSettings(**raw["risk"]),
+        strategy=StrategySettings(**raw["strategy"]),
+        backtest=BacktestSettings(**raw["backtest"]),
     )
     if settings.bot.exchange not in ("bybit", "binance"):
         raise ValueError(f"exchange no soportado: {settings.bot.exchange}")

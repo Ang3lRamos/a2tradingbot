@@ -23,3 +23,20 @@ take_profit_r = 2.0
 max_open_positions = 3
 max_daily_loss = 0.02
 max_drawdown = 0.10
+
+[strategy]
+# Estrategia base: seguir la tendencia y entrar cuando termina un retroceso.
+# Long: EMA rápida > EMA lenta y el RSI cruza hacia arriba rsi_long_trigger. Short: al revés.
+ema_fast = 50
+ema_slow = 200
+rsi_period = 14
+rsi_long_trigger = 40
+rsi_short_trigger = 60
+atr_period = 14
+
+[backtest]
+initial_capital = 10000
+fee_rate = 0.0005      # comisión taker de futuros en Binance (0,05%) por lado
+slippage = 0.0002      # 0,02% en contra en cada entrada y salida a mercado
+# Desde esta fecha los datos son out-of-sample: no se miran hasta la evaluación final.
+oos_start = "2025-11-09"

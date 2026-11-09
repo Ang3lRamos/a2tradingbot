@@ -2,8 +2,10 @@
 
 from datetime import datetime
 
+import pandas as pd
 import psycopg
 from psycopg import sql
+from psycopg.types.json import Jsonb
 
 from tradebot.config import load_database_url
 from tradebot.data.candles import Candle
@@ -79,3 +81,44 @@ def candle_gaps(conn: psycopg.Connection, symbol: str, timeframe: str, step_seco
         """,
         (symbol, timeframe, step_seconds),
     ).fetchall()
+
+
+def load_candles(conn: psycopg.Connection, symbol: str, timeframe: str) -> pd.DataFrame:
+    rows = conn.execute(
+        "select ts, open, high, low, close, volume from candles "
+        "where symbol = %s and timeframe = %s order by ts",
+        (symbol, timeframe),
+    ).fetchall()
+    frame = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume"]).set_index("ts")
+    return frame.astype(float)
+
+
+def load_context(conn: psycopg.Connection, symbol: str, column: str) -> pd.Series:
+    query = sql.SQL("select ts, {col} from market_context where symbol = %s and {col} is not null order by ts").format(
+        col=_context_column(column)
+    )
+    rows = conn.execute(query, (symbol,)).fetchall()
+    return pd.Series({ts: float(value) for ts, value in rows}, name=column, dtype=float)
+
+
+def last_features_ts(conn: psycopg.Connection, symbol: str, timeframe: str) -> datetime | None:
+    row = conn.execute(
+        "select max(ts) from features where symbol = %s and timeframe = %s", (symbol, timeframe)
+    ).fetchone()
+    return row[0]
+
+
+def save_features(conn: psycopg.Connection, symbol: str, timeframe: str, features: pd.DataFrame) -> int:
+    """Una fila por vela; los indicadores aún sin datos suficientes (NaN) se omiten del JSON."""
+    rows = [
+        (symbol, timeframe, ts, Jsonb({k: round(float(v), 8) for k, v in values.items() if pd.notna(v)}))
+        for ts, values in features.iterrows()
+    ]
+    with conn.cursor() as cur:
+        cur.executemany(
+            "insert into features (symbol, timeframe, ts, indicators) values (%s, %s, %s, %s) "
+            "on conflict (symbol, timeframe, ts) do update set indicators = excluded.indicators",
+            rows,
+        )
+    conn.commit()
+    return len(rows)

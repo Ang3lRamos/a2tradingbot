@@ -14,7 +14,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 
 - [x] Fase 0: configuración, esquema de base de datos, conexión a testnet y a Claude
 - [x] Fase 1: ingesta de datos
-- [ ] Fase 2: estrategia base y backtest
+- [ ] Fase 2: estrategia base y backtest (motor listo; la primera estrategia no supera a comprar y mantener)
 - [ ] Fase 3: analista IA
 - [ ] Fase 4: riesgo y ejecución
 - [ ] Fase 5: paper trading y dashboard (Streamlit)
@@ -49,6 +49,16 @@ python -m tradebot.ingest --since 2024-01-01 # vuelve a descargar desde una fech
 ```
 
 Guarda velas cerradas en `candles` y contexto en `market_context`: funding rate (cada 8 h), open interest (cada hora; Binance solo guarda 30 días) y Fear & Greed (diario). Los datos salen del mercado real con un cliente sin llaves, que solo puede leer. Cada fuente corre por separado: si una falla, las demás siguen.
+
+## Backtest (Fase 2)
+
+```bash
+python -m tradebot.backtest                    # periodo in-sample, para desarrollar
+python -m tradebot.backtest --sin-kill-switch  # diagnóstico: la estrategia en todo el periodo
+python -m tradebot.backtest --period oos        # evaluación final, una sola vez
+```
+
+Simula vela a vela con comisiones, slippage, funding y las reglas de riesgo de `config/settings.toml`, y compara contra comprar y mantener BTC. Ante la duda supone lo peor para el bot (si una vela toca stop y take profit, cuenta el stop).
 
 ## Tests
 

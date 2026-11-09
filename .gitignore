@@ -10,3 +10,6 @@ id_rsa*
 *.pem
 *.key
 *.tar.gz
+
+# Resultados de backtest (se regeneran)
+reports/
