@@ -96,7 +96,7 @@ class Cycle:
             if fill:
                 pnl = realized_pnl(position.side, position.qty, position.entry_price, fill.price) - position.fees - fill.fee
                 self.store.close_position(position.id, fill.price, pnl, position.fees + fill.fee, "stop")
-                self._event("info", f"{position.symbol}: posición cerrada por stop en {fill.price}, P&L {pnl:+.2f}")
+                self._event("warning", f"{position.symbol}: posición cerrada por stop en {fill.price}, P&L {pnl:+.2f}")
             else:
                 self.store.close_position(position.id, None, None, position.fees, "desconocido")
                 self._event("warning", f"{position.symbol}: la posición ya no existe en el exchange y no se encontró la ejecución")
