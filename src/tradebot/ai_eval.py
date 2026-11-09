@@ -125,6 +125,11 @@ def run_reviews(settings: Settings, n: int, sample_size: int, version: str = "v1
     done = 0
 
     with db.connect() as conn:
+        # Una sola tanda a la vez: dos procesos revisarían las mismas señales y las contarían dos veces.
+        # El candado es de la sesión: se suelta solo al cerrar la conexión, aunque el proceso se caiga.
+        if not conn.execute("select pg_try_advisory_lock(hashtext(%s))", (instance,)).fetchone()[0]:
+            log.warning("Ya hay una evaluación %s corriendo en otra terminal. Espera a que termine.", version)
+            return 1
         for signal in sample:
             if done >= n:
                 break
