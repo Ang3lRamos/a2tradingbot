@@ -29,6 +29,7 @@ class AISettings:
     decision_model: str
     daily_call_limit: int
     timeout_seconds: int
+    fallback: str = "veto"
 
 
 @dataclass(frozen=True)

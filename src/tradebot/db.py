@@ -122,3 +122,76 @@ def save_features(conn: psycopg.Connection, symbol: str, timeframe: str, feature
         )
     conn.commit()
     return len(rows)
+
+
+def save_signal(conn: psycopg.Connection, instance: str, strategy: str, symbol: str, timeframe: str,
+                ts: datetime, direction: str, score: float, reason: str) -> int:
+    """Registra una señal (idempotente) y devuelve su id."""
+    row = conn.execute(
+        """
+        insert into signals (instance, strategy, symbol, timeframe, ts, direction, score, reason)
+        values (%s, %s, %s, %s, %s, %s, %s, %s)
+        on conflict (instance, strategy, symbol, timeframe, ts) do update set score = excluded.score
+        returning id
+        """,
+        (instance, strategy, symbol, timeframe, ts, direction, score, reason),
+    ).fetchone()
+    conn.commit()
+    return row[0]
+
+
+def has_ai_review(conn: psycopg.Connection, signal_id: int) -> bool:
+    """Solo cuenta revisiones con decisión: las que fallaron se pueden reintentar."""
+    row = conn.execute("select 1 from ai_reviews where signal_id = %s and decision is not null", (signal_id,))
+    return row.fetchone() is not None
+
+
+def save_ai_review(conn: psycopg.Connection, signal_id: int, model: str, prompt: str, response: dict | None,
+                   decision: str | None, error: str | None, input_tokens: int | None,
+                   output_tokens: int | None, duration_ms: int | None) -> None:
+    conn.execute(
+        """
+        insert into ai_reviews (signal_id, model, prompt, response, decision, error,
+                                input_tokens, output_tokens, duration_ms)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        on conflict (signal_id) do update set
+            model = excluded.model, prompt = excluded.prompt, response = excluded.response,
+            decision = excluded.decision, error = excluded.error, input_tokens = excluded.input_tokens,
+            output_tokens = excluded.output_tokens, duration_ms = excluded.duration_ms, created_at = now()
+        """,
+        (signal_id, model, prompt, Jsonb(response) if response is not None else None, decision, error,
+         input_tokens, output_tokens, duration_ms),
+    )
+    conn.commit()
+
+
+def reserve_ai_call(conn: psycopg.Connection, instance: str, daily_limit: int) -> bool:
+    """Suma una llamada al contador del día si queda cupo. Atómico: dos procesos no pueden pasarse del tope."""
+    conn.execute("insert into bot_state (instance) values (%s) on conflict do nothing", (instance,))
+    row = conn.execute(
+        """
+        update bot_state set
+            ai_calls_today = case when ai_calls_date = current_date then ai_calls_today + 1 else 1 end,
+            ai_calls_date = current_date
+        where instance = %s and (ai_calls_date is distinct from current_date or ai_calls_today < %s)
+        returning ai_calls_today
+        """,
+        (instance, daily_limit),
+    ).fetchone()
+    conn.commit()
+    return row is not None
+
+
+def load_reviews(conn: psycopg.Connection, instance: str) -> pd.DataFrame:
+    rows = conn.execute(
+        """
+        select s.id, s.symbol, s.ts, s.direction, s.score, r.decision, r.response, r.error, r.model,
+               r.input_tokens, r.output_tokens, r.duration_ms
+        from signals s join ai_reviews r on r.signal_id = s.id
+        where s.instance = %s order by s.ts
+        """,
+        (instance,),
+    ).fetchall()
+    columns = ["signal_id", "symbol", "ts", "direction", "score", "decision", "response", "error", "model",
+               "input_tokens", "output_tokens", "duration_ms"]
+    return pd.DataFrame(rows, columns=columns)

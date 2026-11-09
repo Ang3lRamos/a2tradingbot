@@ -58,8 +58,15 @@ class VariantRun:
     index: pd.DatetimeIndex
 
 
-def run_variant(variant: Variant, market: dict[str, MarketData], settings: Settings, period: str,
-                kill_switch: bool = True) -> VariantRun:
+@dataclass(frozen=True)
+class PreparedSymbol:
+    candles: pd.DataFrame
+    features: pd.DataFrame
+    signals: pd.DataFrame
+    funding: pd.Series
+
+
+def prepare_variant(variant: Variant, market: dict[str, MarketData], settings: Settings) -> dict[str, PreparedSymbol]:
     prepared = {}
     for symbol, data in market.items():
         candles = resample_candles(data.candles, variant.timeframe)
@@ -67,7 +74,19 @@ def run_variant(variant: Variant, market: dict[str, MarketData], settings: Setti
         signals = variant.signals(candles, features)
         if variant.regime_filter:
             signals = apply_regime(signals, daily_regime(candles))
-        prepared[symbol] = (candles, features["atr"], signals, data.funding)
+        prepared[symbol] = PreparedSymbol(candles, features, signals, data.funding)
+    return prepared
+
+
+def variant_risk(variant: Variant, settings: Settings, kill_switch: bool = True):
+    risk = replace(settings.risk, take_profit_r=variant.take_profit_r)
+    return risk if kill_switch else replace(risk, max_drawdown=1.0)
+
+
+def run_variant(variant: Variant, market: dict[str, MarketData], settings: Settings, period: str,
+                kill_switch: bool = True) -> VariantRun:
+    prepared = {s: (p.candles, p.features["atr"], p.signals, p.funding)
+                for s, p in prepare_variant(variant, market, settings).items()}
 
     all_candles = [candles for candles, *_ in prepared.values()]
     start = min(c.index[0] for c in all_candles) + WARMUP
@@ -75,9 +94,7 @@ def run_variant(variant: Variant, market: dict[str, MarketData], settings: Setti
     index = period_index(common_index(all_candles), start, oos_start, period)
 
     arrays = {s: to_arrays(c, atr, sig, f, index, variant.timeframe) for s, (c, atr, sig, f) in prepared.items()}
-    risk = replace(settings.risk, take_profit_r=variant.take_profit_r)
-    if not kill_switch:
-        risk = replace(risk, max_drawdown=1.0)
+    risk = variant_risk(variant, settings, kill_switch)
     result = run_backtest(index, arrays, risk, settings.backtest, trailing_stop=variant.trailing_stop)
 
     btc_close = next(iter(prepared.values()))[0]["close"].reindex(index)

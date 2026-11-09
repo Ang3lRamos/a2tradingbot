@@ -15,6 +15,8 @@ decision_model = "sonnet"
 # Por debajo del límite de tu plan, para dejar margen a tu uso normal de Claude.
 daily_call_limit = 40
 timeout_seconds = 180
+# Si la IA falla o se agota la cuota: "veto" (no operar la señal) o "base" (operarla sin revisión).
+fallback = "veto"
 
 [risk]
 risk_per_trade = 0.003   # 0,3%: con 0,5% el drawdown in-sample (11,8%) activaba el kill switch del 10%

@@ -31,7 +31,9 @@ class ClaudeCLIAnalyst:
         return Review(
             decision=parse_decision(envelope.get("result", "")),
             model=model,
-            input_tokens=usage.get("input_tokens", 0),
+            # El CLI reporta aparte los tokens servidos desde caché; el total de entrada es la suma.
+            input_tokens=sum(usage.get(k, 0) for k in
+                             ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")),
             output_tokens=usage.get("output_tokens", 0),
             duration_ms=envelope.get("duration_ms", 0),
         )
@@ -41,8 +43,10 @@ class ClaudeCLIAnalyst:
         # así cada revisión gasta una sola respuesta de la cuota.
         command = [self.executable, "-p", prompt, "--output-format", "json", "--model", model, "--tools", ""]
         try:
+            # encoding explícito: en Windows el default es la página de códigos del sistema y daña los acentos.
             completed = subprocess.run(
-                command, capture_output=True, text=True, timeout=self.timeout_seconds, check=False
+                command, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=self.timeout_seconds, check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise AIResponseError(f"Claude CLI no respondió en {self.timeout_seconds} s") from exc

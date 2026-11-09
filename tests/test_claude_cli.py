@@ -68,3 +68,23 @@ def test_review_handles_non_json_output(monkeypatch):
     fake_cli(monkeypatch, "command not found", returncode=127)
     with pytest.raises(AIResponseError, match="127"):
         ClaudeCLIAnalyst(timeout_seconds=5).review("prompt", model="haiku")
+
+
+def test_input_tokens_include_cache(monkeypatch):
+    stdout = json.dumps({"is_error": False, "result": VALID, "duration_ms": 10, "usage": {
+        "input_tokens": 2, "cache_creation_input_tokens": 500, "cache_read_input_tokens": 1500, "output_tokens": 40}})
+    fake_cli(monkeypatch, stdout)
+    review = ClaudeCLIAnalyst(timeout_seconds=5).review("prompt", model="haiku")
+    assert review.input_tokens == 2002
+
+
+def test_cli_output_decoded_as_utf8(monkeypatch):
+    captured = {}
+
+    def run(command, **kwargs):
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout=envelope(VALID), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    ClaudeCLIAnalyst(timeout_seconds=5).review("prompt", model="haiku")
+    assert captured["encoding"] == "utf-8"
