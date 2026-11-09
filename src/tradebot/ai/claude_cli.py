@@ -1,7 +1,9 @@
 """Analista IA que usa la suscripción de Claude a través de Claude Code en modo no interactivo."""
 
 import json
+import shutil
 import subprocess
+from pathlib import Path
 
 from tradebot.ai.base import (
     AIResponseError,
@@ -14,10 +16,21 @@ from tradebot.ai.base import (
 __all__ = ["AIResponseError", "ClaudeCLIAnalyst", "QuotaExceededError", "Review", "ReviewDecision", "parse_decision"]
 
 
+# Instalación nativa de Claude Code; sirve cuando el proceso arrancó con un PATH sin esa carpeta.
+DEFAULT_INSTALL = Path.home() / ".local" / "bin" / "claude.exe"
+
+
+def find_claude() -> str:
+    found = shutil.which("claude")
+    if found:
+        return found
+    return str(DEFAULT_INSTALL) if DEFAULT_INSTALL.exists() else "claude"
+
+
 class ClaudeCLIAnalyst:
-    def __init__(self, timeout_seconds: int, executable: str = "claude"):
+    def __init__(self, timeout_seconds: int, executable: str | None = None):
         self.timeout_seconds = timeout_seconds
-        self.executable = executable
+        self.executable = executable or find_claude()
 
     def review(self, prompt: str, model: str) -> Review:
         envelope = self._run(prompt, model)
@@ -50,6 +63,8 @@ class ClaudeCLIAnalyst:
             )
         except subprocess.TimeoutExpired as exc:
             raise AIResponseError(f"Claude CLI no respondió en {self.timeout_seconds} s") from exc
+        except OSError as exc:
+            raise AIResponseError(f"no se pudo ejecutar Claude CLI ({self.executable}): {exc}") from exc
 
         try:
             return json.loads(completed.stdout)
