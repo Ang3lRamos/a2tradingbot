@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { BottomTabs } from "@/components/bottom-tabs";
 import { EquityPanel } from "@/components/equity-panel";
 import { Markets } from "@/components/markets";
@@ -5,7 +7,15 @@ import { AccountPanel, AiPanel, PositionsPanel } from "@/components/side-panels"
 import { StatusBar } from "@/components/status-bar";
 import { getDashboardData } from "@/lib/data";
 
-export default async function Page() {
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-bg" />}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+async function Dashboard() {
   const data = await getDashboardData();
   const state = data.resumen?.estado ?? null;
   const live = data.resumen?.vivo ?? null;

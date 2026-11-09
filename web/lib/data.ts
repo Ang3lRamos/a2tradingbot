@@ -12,8 +12,9 @@ const EMPTY: DashboardData = { resumen: null, ia: null, backtest_is: null, backt
 
 export async function getDashboardData(): Promise<DashboardData> {
   "use cache";
-  // El bot publica una vez por hora; refrescar cada minuto es de sobra.
-  cacheLife("minutes");
+  // Caché corta (expira en 2 min): Next la excluye del prerender y cada visita lee la base.
+  // Con "minutes" Vercel servía la copia vieja a la primera visita tras horas sin tráfico.
+  cacheLife({ stale: 60, revalidate: 60, expire: 120 });
 
   const connectionString = process.env.DASHBOARD_DATABASE_URL;
   if (!connectionString) {
