@@ -16,3 +16,6 @@ reports/
 
 # Llaves para Docker (se montan como archivo)
 secrets/
+
+# Logs del bot
+logs/
