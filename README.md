@@ -17,7 +17,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 - [ ] Fase 2: estrategia base y backtest (sin ventaja out-of-sample; ver docs/resultados_fase2.md)
 - [ ] Fase 3: analista IA (en evaluación: python -m tradebot.ai_eval)
 - [x] Fase 4: riesgo y ejecución (probado con órdenes reales en Binance Demo)
-- [ ] Fase 5: paper trading y dashboard (dashboard, Telegram y Docker listos; falta el VPS y los 30 días en papel)
+- [ ] Fase 5: paper trading y dashboard (dashboard web, Telegram y Docker listos; faltan los 30 días en papel)
 
 ## Puesta en marcha
 
@@ -75,14 +75,23 @@ python -m tradebot.run --reanudar  # quitar kill switch o solo cierre tras revis
 
 Cada ciclo reconcilia la base con el exchange, actualiza el riesgo (pérdida diaria, kill switch), mueve trailing stops y procesa señales nuevas pasando por Claude. Los stops viven en el exchange: protegen aunque el bot esté caído. Si un stop no se puede poner, la posición se cierra de inmediato.
 
-## Dashboard y alertas (Fase 5)
+## Dashboard (Fase 5)
 
-```bash
-pip install -e ".[dashboard]"
-streamlit run dashboard/app.py
-```
+Dashboard web en Next.js (`web/`), con estilo de terminal de trading: capital del bot contra comprar y mantener BTC (en vivo y en backtest), mercados, posiciones, operaciones, alertas, métricas y el aporte del analista IA.
 
-Tres pestañas: el bot en vivo contra comprar y mantener BTC (con métricas y alertas), el aporte del analista IA y el backtest. Las alertas importantes llegan por Telegram si `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están en `.env`. Para correr todo 24/7 en un servidor con Docker, ver [docs/despliegue.md](docs/despliegue.md).
+El bot publica los datos ya calculados en la tabla `dashboard_snapshots` al final de cada ciclo (`python -m tradebot.publish`). El dashboard solo lee esa tabla, con un usuario de base de datos de solo lectura, así que puede estar en Vercel sin acceso al PC ni a las llaves del bot.
+
+**En local:** doble clic en `ver_dashboard.cmd` (abre http://localhost:3000).
+
+**En Vercel:**
+
+1. Crea el usuario de solo lectura: `python -m tradebot.publish --crear-lector`. Su URL queda en `.env` y `web/.env.local` como `DASHBOARD_DATABASE_URL`.
+2. En vercel.com: Add New → Project → importa este repositorio.
+3. **Root Directory:** `web`. El framework (Next.js) se detecta solo.
+4. **Environment Variables:** `DASHBOARD_DATABASE_URL` con la URL del paso 1.
+5. Deploy. Cada push a `main` vuelve a desplegar; los datos se refrescan cada minuto.
+
+Las alertas importantes llegan por Telegram si `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están en `.env`. Para correr el bot 24/7 en un servidor con Docker, ver [docs/despliegue.md](docs/despliegue.md).
 
 ## Tests
 

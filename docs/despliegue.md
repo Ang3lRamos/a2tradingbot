@@ -57,13 +57,7 @@ El bot corre un ciclo a los 2 minutos de cada hora (UTC) y se reinicia solo si e
 
 ## 6. Ver el dashboard
 
-El dashboard no tiene login, así que solo escucha en el localhost del servidor. Ábrelo con un túnel SSH desde tu PC:
-
-```bash
-ssh -L 8501:localhost:8501 usuario@IP_DEL_VPS
-```
-
-y entra a http://localhost:8501.
+El dashboard web (`web/`) se despliega en Vercel y lee los datos que el bot publica en Supabase. Ver la sección "Dashboard en Vercel" del README.
 
 ## Operación
 

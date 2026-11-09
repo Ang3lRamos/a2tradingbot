@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Tokens: terminal de trading oscuro. Paneles pegados con líneas de 1px, sin sombras.
+   Verde y rojo solo para dirección (ganancia/pérdida), siempre acompañados de signo.
+   Series del gráfico: azul = bot, naranja = comprar y mantener BTC (paleta validada para daltonismo). */
+:root {
+  --bg: #0a0d10;
+  --panel: #10141a;
+  --panel-raised: #161b22;
+  --line: #222a33;
+  --line-strong: #2f3944;
+  --ink: #e4e7eb;
+  --ink-muted: #8b95a3;
+  --ink-faint: #5d6774;
+  --up: #1fbf75;
+  --down: #f0525f;
+  --warn: #e0a526;
+  --series-bot: #3987e5;
+  --series-btc: #d95926;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-warn: var(--warn);
+  --color-series-bot: var(--series-bot);
+  --color-series-btc: var(--series-btc);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-size: 13px;
+}
+
+/* Cifras alineadas en columnas. */
+.num {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--series-bot) 35%, transparent);
+}

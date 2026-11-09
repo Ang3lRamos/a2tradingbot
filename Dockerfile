@@ -1,4 +1,4 @@
-# Imagen única para el bot y el dashboard.
+# Imagen del bot. El dashboard (web/) se despliega aparte en Vercel.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -15,9 +15,9 @@ RUN useradd --create-home bot
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --no-cache-dir -e ".[dashboard]"
+RUN pip install --no-cache-dir -e .
 COPY config ./config
-COPY dashboard ./dashboard
+COPY sql ./sql
 
 USER bot
 CMD ["python", "-m", "tradebot.run"]

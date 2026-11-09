@@ -24,6 +24,7 @@ from tradebot.exchange import create_exchange
 from tradebot.live.cycle import Cycle, Snapshot
 from tradebot.live.store import LiveStore
 from tradebot.notify import create_notifier
+from tradebot.publish import publish
 
 log = logging.getLogger("tradebot.run")
 
@@ -50,6 +51,11 @@ def run_once(settings: Settings) -> int:
             log.exception("el ciclo falló")
             return 1
     log.info("ciclo terminado: %d eventos", len(events))
+    try:
+        # Datos para el dashboard web. Si falla, el bot sigue: solo el dashboard queda desactualizado.
+        log.info("dashboard: publicado %s", ", ".join(publish(settings)))
+    except Exception:  # noqa: BLE001 - nada del dashboard debe tumbar el ciclo
+        log.exception("no se pudieron publicar los datos del dashboard")
     return 0
 
 
