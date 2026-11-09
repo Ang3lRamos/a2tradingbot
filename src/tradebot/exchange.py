@@ -20,6 +20,15 @@ def create_exchange(bot: BotSettings, credentials: ExchangeCredentials) -> ccxt.
             "options": {"defaultType": bot.market_type},
         }
     )
-    # Siempre testnet en esta etapa del proyecto: no hay camino para operar con dinero real.
-    exchange.set_sandbox_mode(True)
+    # Siempre dinero de prueba en esta etapa del proyecto: no hay camino para operar con dinero real.
+    # Binance retiró la testnet de futuros; su reemplazo es Demo Trading (demo.binance.com),
+    # que cubre spot y futuros. Bybit sigue usando su testnet.
+    if bot.exchange == "binance":
+        exchange.enable_demo_trading(True)
+    else:
+        exchange.set_sandbox_mode(True)
     return exchange
+
+
+def is_paper(exchange: ccxt.Exchange) -> bool:
+    return bool(exchange.isSandboxModeEnabled or exchange.options.get("enableDemoTrading"))

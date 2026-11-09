@@ -21,7 +21,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 
 ## Puesta en marcha
 
-Requisitos: Python 3.12+, [Claude Code](https://docs.claude.com/en/docs/claude-code) con sesión iniciada en tu plan, un proyecto de Supabase y una cuenta de testnet en Bybit o Binance.
+Requisitos: Python 3.12+, [Claude Code](https://docs.claude.com/en/docs/claude-code) con sesión iniciada en tu plan, un proyecto de Supabase y una cuenta en Binance Demo Trading (demo.binance.com) o en la testnet de Bybit.
 
 ```bash
 python -m venv .venv
@@ -31,7 +31,7 @@ cp .env.example .env               # completa llaves de testnet y DATABASE_URL
 ```
 
 1. En Supabase, abre el SQL Editor y ejecuta `sql/001_schema.sql`.
-2. Crea llaves de API en la testnet del exchange (sin permiso de retiro) y ponlas en `.env`.
+2. Crea llaves de API en Binance Demo Trading o en la testnet de Bybit (sin permiso de retiro) y ponlas en `.env`.
 3. Revisa `config/settings.toml` (exchange, mercado, monedas).
 4. Corre el chequeo:
 

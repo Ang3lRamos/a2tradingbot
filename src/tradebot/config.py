@@ -76,12 +76,23 @@ def _require_env(name: str) -> str:
 
 
 def load_exchange_credentials(exchange: ExchangeName) -> ExchangeCredentials:
+    """Llave HMAC (`<EXCHANGE>_API_SECRET`) o Ed25519 (`<EXCHANGE>_PRIVATE_KEY_PATH`, archivo PEM).
+
+    Con Ed25519 ccxt firma con la llave privada, que se lee de un archivo fuera del repo.
+    """
     load_dotenv()
     prefix = exchange.upper()
-    return ExchangeCredentials(
-        api_key=_require_env(f"{prefix}_API_KEY"),
-        secret=_require_env(f"{prefix}_API_SECRET"),
-    )
+    key_path = os.getenv(f"{prefix}_PRIVATE_KEY_PATH")
+    if key_path:
+        path = Path(key_path).expanduser()
+        if not path.is_file():
+            raise RuntimeError(f"{prefix}_PRIVATE_KEY_PATH apunta a un archivo que no existe: {path}")
+        secret = path.read_text(encoding="utf-8").strip()
+        if "PRIVATE KEY" not in secret:
+            raise RuntimeError(f"{path} no es una llave privada PEM (debe empezar con -----BEGIN PRIVATE KEY-----)")
+    else:
+        secret = _require_env(f"{prefix}_API_SECRET")
+    return ExchangeCredentials(api_key=_require_env(f"{prefix}_API_KEY"), secret=secret)
 
 
 def load_database_url() -> str:

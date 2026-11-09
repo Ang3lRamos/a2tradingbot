@@ -1,7 +1,7 @@
 [bot]
 # Una instancia = una combinación de exchange y mercado. En la fase 5 se puede correr una segunda.
-instance = "bybit-perp"
-exchange = "bybit"        # "bybit" o "binance"
+instance = "binance-perp"
+exchange = "binance"      # "binance" (Demo Trading) o "bybit" (testnet; bloqueado en algunas regiones)
 market_type = "swap"      # "spot" (solo long) o "swap" (perpetuos, long y short)
 quote = "USDT"
 bases = ["BTC", "ETH", "SOL"]

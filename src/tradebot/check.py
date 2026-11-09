@@ -43,11 +43,19 @@ def check_exchange(settings: Settings) -> str:
     ticker = exchange.fetch_ticker(symbol)
     balance = exchange.fetch_balance()
     quote_free = balance.get("free", {}).get(bot.quote, 0)
-    return f"{bot.exchange} testnet ({bot.market_type}): {symbol} = {ticker['last']}, {bot.quote} libre = {quote_free}"
+    return f"{bot.exchange} en papel ({bot.market_type}): {symbol} = {ticker['last']}, {bot.quote} libre = {quote_free}"
 
 
 def check_database() -> str:
-    with psycopg.connect(load_database_url(), connect_timeout=10) as conn:
+    url = load_database_url()
+    if not url.startswith(("postgresql://", "postgres://")):
+        raise RuntimeError("DATABASE_URL debe empezar con postgresql:// (Supabase > Connect > Session pooler)")
+    try:
+        conn = psycopg.connect(url, connect_timeout=10)
+    except psycopg.Error as exc:
+        # libpq puede citar partes de la URL en el mensaje, incluida la contraseña.
+        raise RuntimeError(f"no se pudo conectar a Supabase ({type(exc).__name__}); revisa DATABASE_URL") from None
+    with conn:
         rows = conn.execute(
             "select table_name from information_schema.tables where table_schema = 'public'"
         ).fetchall()
