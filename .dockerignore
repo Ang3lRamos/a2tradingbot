@@ -1,0 +1,11 @@
+.env
+.venv
+.git
+reports
+secrets
+**/__pycache__
+.pytest_cache
+*.egg-info
+id_ed25519*
+*.pem
+*.key

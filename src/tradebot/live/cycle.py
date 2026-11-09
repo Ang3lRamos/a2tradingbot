@@ -73,6 +73,7 @@ class Cycle:
     store: LiveStore
     broker: Broker
     analyst: AIAnalyst
+    notifier: object = None  # TelegramNotifier o NullNotifier; None = solo log y tabla alerts
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     events: list[str] = field(default_factory=list)
 
@@ -81,6 +82,8 @@ class Cycle:
         getattr(log, {"info": "info", "warning": "warning", "critical": "error"}[level])(message)
         if level != "info":
             self.store.alert(level, message)
+            if self.notifier is not None:
+                self.notifier.send(level, message)
 
     # 1. Reconciliación
 
@@ -121,6 +124,7 @@ class Cycle:
             # Sin saldo no se actualiza el pico ni el capital del día (quedarían en 0) y no se opera.
             self._event("warning", "la cuenta de futuros no tiene saldo: no se procesan señales")
             return replace(state, mode=CLOSE_ONLY, mode_reason="sin_saldo"), last_bar
+        self.store.record_equity(self.now().replace(minute=0, second=0, microsecond=0), equity)
         update = update_risk_state(state, equity, self.now().date(), self.settings.risk)
         state = update.state
         for event in update.events:

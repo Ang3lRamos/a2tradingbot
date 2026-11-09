@@ -1,0 +1,22 @@
+# Uso: docker compose up -d --build
+# Requiere en .env: llaves de Binance Demo, DATABASE_URL, CLAUDE_CODE_OAUTH_TOKEN y, opcional, Telegram.
+services:
+  bot:
+    build: .
+    command: python -m tradebot.run
+    env_file: .env
+    environment:
+      # La llave privada Ed25519 se monta como archivo de solo lectura; nunca va dentro de la imagen.
+      BINANCE_PRIVATE_KEY_PATH: /run/secrets/binance_key
+    volumes:
+      - ${BINANCE_KEY_FILE:-./secrets/id_ed25519}:/run/secrets/binance_key:ro
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    env_file: .env
+    # Solo en localhost del servidor: el dashboard no tiene login. Se abre con un túnel SSH.
+    ports:
+      - "127.0.0.1:8501:8501"
+    restart: unless-stopped

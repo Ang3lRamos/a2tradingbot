@@ -88,6 +88,9 @@ class FakeStore:
     def set_last_cycle_bar(self, ts):
         self.last_bar = ts
 
+    def record_equity(self, ts, equity):
+        self.equity_history = getattr(self, "equity_history", []) + [(ts, equity)]
+
     def open_positions(self):
         return [OpenPosition(i, p["symbol"], p["side"], p["qty"], p["entry"], p["stop"], p["distance"], p["stop_id"],
                              p["opened_at"], p["fees"]) for i, p in self.positions.items() if p["status"] == "open"]
@@ -257,3 +260,16 @@ def test_empty_account_does_not_call_ai_or_store_zero_equity(approve):
     make_cycle(store, broker).run(snapshot())
     assert approve == [] and store.open_positions() == []
     assert store.state.equity_peak is None and store.state.mode == "operar"  # no se guarda el modo temporal
+
+
+def test_alerts_go_to_notifier_and_equity_is_recorded(approve):
+    sent = []
+
+    class Notifier:
+        def send(self, level, message):
+            sent.append(level)
+
+    store, broker = FakeStore(), FakeBroker()
+    Cycle(SETTINGS, store, broker, analyst=None, notifier=Notifier(), now=lambda: NOW).run(snapshot())
+    assert sent == ["warning"]  # la apertura de la posición; los eventos "info" no se envían
+    assert store.equity_history == [(NOW.replace(minute=0), 5000.0)]

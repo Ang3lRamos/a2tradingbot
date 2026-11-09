@@ -33,3 +33,24 @@ def test_executed_order_never_raises_when_details_fail():
     # La orden ya se ejecutó: si la consulta de detalles falla, se reporta igual (sin comisión).
     fill = CCXTBroker(FakeExchange(trades_error=True), "USDT").market_close("X", "long", 1.0)
     assert fill.order_id == "1" and fill.fee == 0.0
+
+
+def test_notifier_disabled_without_credentials(monkeypatch):
+    from tradebot import notify
+
+    monkeypatch.setattr(notify, "load_dotenv", lambda: None)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    assert isinstance(notify.create_notifier(), notify.NullNotifier)
+
+
+def test_notifier_failure_does_not_raise(monkeypatch):
+    import urllib.request
+
+    from tradebot.notify import TelegramNotifier
+
+    def boom(*args, **kwargs):
+        raise OSError("sin red")
+
+    monkeypatch.setattr(urllib.request, "urlopen", boom)
+    assert TelegramNotifier("token", "chat").send("critical", "prueba") is False

@@ -23,6 +23,7 @@ from tradebot.config import Settings, load_exchange_credentials, load_settings
 from tradebot.exchange import create_exchange
 from tradebot.live.cycle import Cycle, Snapshot
 from tradebot.live.store import LiveStore
+from tradebot.notify import create_notifier
 
 log = logging.getLogger("tradebot.run")
 
@@ -35,15 +36,17 @@ def load_snapshot(settings: Settings) -> Snapshot:
 def run_once(settings: Settings) -> int:
     if ingest.main([]) != 0:
         log.warning("la ingesta tuvo fallas; el ciclo sigue con los datos disponibles")
+    notifier = create_notifier(prefix=f"[{settings.bot.instance}] ")
     with db.connect() as conn:
         store = LiveStore(conn, settings.bot.instance)
         try:
             broker = CCXTBroker(create_exchange(settings.bot, load_exchange_credentials(settings.bot.exchange)),
                                 settings.bot.quote)
-            events = Cycle(settings, store, broker, create_analyst(settings.ai)).run(load_snapshot(settings))
+            events = Cycle(settings, store, broker, create_analyst(settings.ai), notifier).run(load_snapshot(settings))
         except (BrokerError, ccxt.BaseError, psycopg.Error, OSError) as exc:
             conn.rollback()
             store.alert("critical", f"el ciclo falló: {exc}")
+            notifier.send("critical", f"el ciclo falló: {type(exc).__name__}: {str(exc)[:300]}")
             log.exception("el ciclo falló")
             return 1
     log.info("ciclo terminado: %d eventos", len(events))

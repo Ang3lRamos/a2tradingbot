@@ -17,7 +17,7 @@ La IA usa la suscripción de Claude a través de Claude Code en modo no interact
 - [ ] Fase 2: estrategia base y backtest (sin ventaja out-of-sample; ver docs/resultados_fase2.md)
 - [ ] Fase 3: analista IA (en evaluación: python -m tradebot.ai_eval)
 - [x] Fase 4: riesgo y ejecución (probado con órdenes reales en Binance Demo)
-- [ ] Fase 5: paper trading y dashboard (Streamlit)
+- [ ] Fase 5: paper trading y dashboard (dashboard, Telegram y Docker listos; falta el VPS y los 30 días en papel)
 
 ## Puesta en marcha
 
@@ -74,6 +74,15 @@ python -m tradebot.run --reanudar  # quitar kill switch o solo cierre tras revis
 ```
 
 Cada ciclo reconcilia la base con el exchange, actualiza el riesgo (pérdida diaria, kill switch), mueve trailing stops y procesa señales nuevas pasando por Claude. Los stops viven en el exchange: protegen aunque el bot esté caído. Si un stop no se puede poner, la posición se cierra de inmediato.
+
+## Dashboard y alertas (Fase 5)
+
+```bash
+pip install -e ".[dashboard]"
+streamlit run dashboard/app.py
+```
+
+Tres pestañas: el bot en vivo contra comprar y mantener BTC (con métricas y alertas), el aporte del analista IA y el backtest. Las alertas importantes llegan por Telegram si `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` están en `.env`. Para correr todo 24/7 en un servidor con Docker, ver [docs/despliegue.md](docs/despliegue.md).
 
 ## Tests
 

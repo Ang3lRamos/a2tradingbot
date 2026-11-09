@@ -94,6 +94,10 @@ class LiveStore:
             "on conflict (exchange_order_id) do update set status = excluded.status, updated_at = now()",
             (self.instance, position_id, order_id, symbol, side, order_type, qty, price, status, fee))
 
+    def record_equity(self, ts: datetime, equity: float) -> None:
+        self._commit("insert into equity_snapshots (instance, ts, equity) values (%s, %s, %s) "
+                     "on conflict (instance, ts) do update set equity = excluded.equity", (self.instance, ts, equity))
+
     # --- señales y alertas ---
 
     def new_signal(self, strategy: str, symbol: str, timeframe: str, ts: datetime, direction: str, score: float,

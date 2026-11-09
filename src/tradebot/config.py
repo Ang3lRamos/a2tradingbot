@@ -9,7 +9,8 @@ from dotenv import load_dotenv
 ExchangeName = Literal["bybit", "binance"]
 MarketType = Literal["spot", "swap"]
 
-DEFAULT_SETTINGS_PATH = Path(__file__).resolve().parents[2] / "config" / "settings.toml"
+# TRADEBOT_SETTINGS permite indicar otra ruta (p. ej. dentro de un contenedor).
+DEFAULT_SETTINGS_PATH = Path(os.getenv("TRADEBOT_SETTINGS") or Path(__file__).resolve().parents[2] / "config" / "settings.toml")
 
 
 @dataclass(frozen=True)

@@ -13,3 +13,6 @@ id_rsa*
 
 # Resultados de backtest (se regeneran)
 reports/
+
+# Llaves para Docker (se montan como archivo)
+secrets/

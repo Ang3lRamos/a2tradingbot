@@ -23,7 +23,7 @@ from tradebot import db
 from tradebot.ai import create_analyst
 from tradebot.ai.context import AssetFrames, build_context
 from tradebot.ai.prompt import PROMPT_VERSION, render_prompt
-from tradebot.ai.review import review_signal
+from tradebot.ai.review import review_signal, size_for
 from tradebot.backtest.data import load_market
 from tradebot.backtest.outcomes import signal_outcome
 from tradebot.backtest.variants import WARMUP, build_variants, prepare_variant, variant_risk
@@ -142,28 +142,33 @@ def bootstrap_interval(values: np.ndarray, statistic, n: int = 5000, level: floa
     return float(np.percentile(draws, tail)), float(np.percentile(draws, 100 - tail))
 
 
-def report(settings: Settings) -> int:
+def scored_reviews(settings: Settings, instance: str) -> pd.DataFrame:
+    """Revisiones con decisión, más el resultado (R) de cada señal y el tamaño que asignó la IA."""
     variant, prepared, _, _ = load_universe(settings)
     with db.connect() as conn:
-        reviews = db.load_reviews(conn, eval_instance(settings))
-    reviews = reviews[reviews["decision"].notna()].copy()
+        reviews = db.load_reviews(conn, instance)
+    reviews = reviews[reviews["decision"].notna() & reviews["symbol"].isin(prepared)].copy()
     if reviews.empty:
-        log.info("Todavía no hay revisiones. Corre: python -m tradebot.ai_eval --n 10")
-        return 0
+        return reviews.assign(r=pd.Series(dtype=float), size=pd.Series(dtype=float))
 
     risk = variant_risk(variant, settings)
     outcomes = []
     for row in reviews.itertuples():
         p = prepared[row.symbol]
         ts = pd.Timestamp(row.ts)
-        outcomes.append(signal_outcome(p.candles, p.features["atr"], p.funding, p.signals.loc[[ts]],
-                                       risk, settings.backtest, variant.timeframe, variant.trailing_stop))
+        outcomes.append(signal_outcome(p.candles, p.features["atr"], p.funding, p.signals.loc[[ts]], risk,
+                                       settings.backtest, variant.timeframe, variant.trailing_stop)
+                        if ts in p.signals.index else np.nan)
     reviews["r"] = outcomes
-    reviews["size"] = [
-        1.0 if d == "approve" else (min(max(r["size_multiplier"], 0.1), 0.9) if d == "reduce" else 0.0)
-        for d, r in zip(reviews["decision"], reviews["response"])
-    ]
-    reviews = reviews.dropna(subset=["r"])
+    reviews["size"] = [size_for(d, float(r.get("size_multiplier", 0))) for d, r in zip(reviews["decision"], reviews["response"])]
+    return reviews.dropna(subset=["r"])
+
+
+def report(settings: Settings) -> int:
+    reviews = scored_reviews(settings, eval_instance(settings))
+    if reviews.empty:
+        log.info("Todavía no hay revisiones. Corre: python -m tradebot.ai_eval --n 10")
+        return 0
     oos_start = pd.Timestamp(settings.backtest.oos_start, tz="UTC")
 
     log.info("Revisiones: %d (modelo %s, prompt %s)\n", len(reviews), reviews["model"].iloc[0], PROMPT_VERSION)
