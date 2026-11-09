@@ -1,5 +1,7 @@
-import { ago, pct, utc } from "@/lib/format";
+import { pct, utc } from "@/lib/format";
 import type { BotState } from "@/lib/types";
+
+import { Heartbeat } from "./heartbeat";
 
 const MODES = {
   operar: { label: "Operando", dot: "bg-up", text: "text-up" },
@@ -9,7 +11,6 @@ const MODES = {
 
 export function StatusBar({ state, updated }: { state: BotState | null; updated: string | null }) {
   const mode = state?.modo ? MODES[state.modo] : null;
-  const alive = state?.activo ?? false;
 
   return (
     <header className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-line bg-panel px-3 py-2">
@@ -19,13 +20,7 @@ export function StatusBar({ state, updated }: { state: BotState | null; updated:
       </div>
 
       <Item label="Estado">
-        <span className="flex items-center gap-1.5">
-          <span className={`relative inline-flex size-2 rounded-full ${alive ? "bg-up" : "bg-down"}`}>
-            {alive ? <span className="absolute inset-0 animate-ping rounded-full bg-up opacity-50" /> : null}
-          </span>
-          <span className={alive ? "text-ink" : "text-down"}>{alive ? "Activo" : "Sin señal de vida"}</span>
-          <span className="text-ink-faint">· {ago(state?.minutos_desde_ciclo)}</span>
-        </span>
+        <Heartbeat lastCycle={state?.ultimo_ciclo} />
       </Item>
 
       <Item label="Modo">
