@@ -116,6 +116,14 @@ def run_reviews(settings: Settings, n: int, sample_size: int) -> int:
                      f" (error: {outcome.error[:80]})" if outcome.error else "")
 
         reviewed = len(db.load_reviews(conn, instance).query("decision.notna()"))
+    if done:
+        from tradebot.publish import publish_ai  # import local: publish depende de este módulo
+
+        try:
+            publish_ai(settings)
+            log.info("dashboard: panel de IA actualizado")
+        except Exception:  # noqa: BLE001 - la tanda ya quedó guardada; el dashboard es secundario
+            log.exception("no se pudo actualizar el panel de IA del dashboard")
     log.info("\nRevisadas con éxito: %d de %d en la muestra (%d señales en total).", reviewed, len(sample), len(signals))
     return 0
 

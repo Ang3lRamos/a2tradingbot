@@ -42,6 +42,11 @@ def _age(key: str) -> timedelta | None:
     return row[0] if row else None
 
 
+def publish_ai(settings: Settings) -> None:
+    """Refresca solo el panel de IA (lo llama ai_eval al terminar una tanda)."""
+    _save("ia", reporting.ai(settings))
+
+
 def publish(settings: Settings, everything: bool = False) -> list[str]:
     jobs = {
         "resumen": lambda: reporting.clean({"estado": reporting.bot_state(settings),
