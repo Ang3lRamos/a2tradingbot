@@ -2,7 +2,7 @@
 
 Cada idea se anota **antes** de probarla, con cuántas variantes se intentan. Así se sabe cuántos intentos hubo detrás de un buen resultado: si se prueban muchas, la mejor sale bien por suerte.
 
-Intentos acumulados: **7 variantes de estrategia** (lista fija en `backtest/variants.py`) y **1 prompt de IA** (v1).
+Intentos acumulados: **9 variantes de estrategia** (7 de rupturas en `backtest/variants.py` y 2 de tendencia) (lista fija en `backtest/variants.py`) y **2 prompts de IA** (v1 con Sonnet, v2 con Opus).
 
 ---
 
@@ -122,6 +122,29 @@ Escrito antes de correrlo. El v1 (Sonnet) dio una habilidad de +0,043 R (IC 90%:
 - **Métrica principal:** correlación de rangos (Spearman) entre el puntaje y el R de cada señal, con intervalo del 90% por semanas completas.
 - **Criterio de éxito, fijado antes:** el límite inferior del intervalo de la correlación es mayor que 0. Métrica secundaria: habilidad de selección, como en el v1.
 - El bot en vivo sigue con el v1 hasta que esto termine.
+
+### Resultado (300 señales, Opus)
+
+| | Valor | Intervalo 90% (por semanas) |
+|---|---|---|
+| Correlación puntaje-R (Spearman), **métrica principal** | −0,044 | −0,144 a +0,059 |
+| Habilidad de selección (secundaria) | +0,046 R | −0,014 a +0,107 |
+
+| tercil del puntaje | puntaje | R medio | acierto |
+|---|---|---|---|
+| bajo | 22–34 | −0,08 | 36% |
+| medio | 34–46 | +0,07 | 48% |
+| alto | 46–73 | +0,23 | 44% |
+
+**El criterio pre-registrado no se cumple:** el puntaje no ordena las señales mejor que el azar.
+
+Lectura:
+
+- El R medio sube con el puntaje, pero el acierto no. La diferencia viene de unas pocas ganancias grandes que cayeron en el tercil alto, no de que Opus acierte más seguido. Spearman, que mira el orden y no el tamaño, no ve nada.
+- v1 (Sonnet) y v2 (Opus), con muestras distintas, dan casi la misma habilidad: +0,043 y +0,046 R, y ambas con un intervalo que toca el cero. Juntarlas sería un análisis no pre-registrado: queda solo como pista exploratoria, no como prueba.
+- Costo: Opus con `claude -p` consumió la ventana de 5 horas con unas 15–40 revisiones. Aunque tuviera una habilidad de +0,05 R, en vivo no compensa el riesgo de dejar al bot sin revisión cuando se agota la cuota.
+
+**Decisión:** no se adopta el v2. El bot en vivo sigue con el v1 (Sonnet, barato).
 
 **Próximas ideas** (anotar aquí antes de probarlas):
 
