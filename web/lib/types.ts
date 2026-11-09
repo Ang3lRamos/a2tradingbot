@@ -106,4 +106,6 @@ export type DashboardData = {
   backtest_is: Backtest | null;
   backtest_oos: Backtest | null;
   actualizado: string | null;
+  /** Problema de configuración o conexión, para mostrar en pantalla en vez de fallar. */
+  error: string | null;
 };
