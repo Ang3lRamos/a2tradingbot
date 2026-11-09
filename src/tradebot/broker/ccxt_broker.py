@@ -48,24 +48,35 @@ class CCXTBroker:
     def min_notional(self, symbol: str) -> float:
         return float(self.exchange.market(symbol)["limits"]["cost"]["min"] or 0)
 
-    def _fill(self, order: dict, fallback_qty: float) -> Fill:
-        if not order.get("average"):
-            order = self.exchange.fetch_order(order["id"], order["symbol"])
-        fee = sum(float(f.get("cost") or 0) for f in order.get("fees") or []) or float((order.get("fee") or {}).get("cost") or 0)
-        return Fill(str(order["id"]), float(order["average"]), float(order.get("filled") or fallback_qty), fee)
+    def _fill(self, order: dict, qty: float) -> Fill:
+        """Datos de una orden YA ejecutada. Nunca lanza: si una consulta falla, se usa lo que haya."""
+        price = order.get("average") or order.get("price")
+        fee = 0.0
+        try:
+            # La respuesta de una orden a mercado no trae la comisión ni siempre el precio: están en sus ejecuciones.
+            trades = [t for t in self.exchange.fetch_my_trades(order["symbol"], params={"orderId": order["id"]})
+                      if str(t.get("order")) == str(order["id"])]
+            if trades:
+                filled = sum(float(t["amount"]) for t in trades)
+                price = price or sum(float(t["price"]) * float(t["amount"]) for t in trades) / filled
+                fee = sum(float((t.get("fee") or {}).get("cost") or 0) for t in trades)
+        except ccxt.BaseError:
+            pass
+        return Fill(str(order["id"]), float(price or 0), float(order.get("filled") or qty), fee)
 
     def market_open(self, symbol: str, side: Side, qty: float) -> Fill:
         try:
-            return self._fill(self.exchange.create_order(symbol, "market", OPEN_SIDE[side], qty), qty)
+            order = self.exchange.create_order(symbol, "market", OPEN_SIDE[side], qty)
         except ccxt.BaseError as exc:
             raise BrokerError(f"no se pudo abrir {side} {qty} {symbol}: {exc}") from exc
+        return self._fill(order, qty)
 
     def market_close(self, symbol: str, side: Side, qty: float) -> Fill:
         try:
             order = self.exchange.create_order(symbol, "market", CLOSE_SIDE[side], qty, None, {"reduceOnly": True})
-            return self._fill(order, qty)
         except ccxt.BaseError as exc:
             raise BrokerError(f"no se pudo cerrar {side} {qty} {symbol}: {exc}") from exc
+        return self._fill(order, qty)
 
     def place_stop(self, symbol: str, side: Side, qty: float, stop_price: float) -> str:
         price = float(self.exchange.price_to_precision(symbol, stop_price))
