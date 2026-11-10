@@ -11,7 +11,7 @@ import { Empty, Panel, Stat } from "./panel";
 const direction = (side: Position["lado"]) => (side === "long" ? 1 : -1);
 
 /** P&L no realizado neto de la comisión de entrada. */
-function unrealized(p: Position, px: number): number {
+export function unrealized(p: Position, px: number): number {
   return direction(p.lado) * p.cantidad * (px - p.entrada) - (p.comisiones ?? 0);
 }
 
