@@ -19,7 +19,7 @@ from tradebot import db
 from tradebot.backtest.data import load_market
 from tradebot.backtest.trend import REBALANCE_BAND, daily_closes, target_weights
 from tradebot.config import BacktestSettings, Settings, load_settings
-from tradebot.notify import create_notifier
+from tradebot.notify import Card, coin, create_notifier, failure_card
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +39,30 @@ class Trade:
     cost: float
     weight_before: float
     weight_after: float
+
+
+@dataclass(frozen=True)
+class DayResult:
+    day: date
+    equity: float
+    weights: dict[str, float]
+    trades: list[Trade]
+
+    def summary(self) -> str:
+        weights = ", ".join(f"{coin(s)} {w:+.0%}" for s, w in self.weights.items())
+        changes = "; ".join(f"{coin(t.symbol)} {t.weight_before:+.0%}→{t.weight_after:+.0%}" for t in self.trades)
+        return (f"{self.day}: capital {self.equity:,.2f} | pesos {weights}"
+                + (f" | rebalanceo: {changes}" if self.trades else " | sin cambios"))
+
+    def card(self, initial_capital: float) -> Card:
+        rows = [("Capital", f"{self.equity:,.2f} USDT ({self.equity / initial_capital - 1:+.1%})")]
+        traded = {t.symbol: t for t in self.trades}
+        for symbol, weight in self.weights.items():
+            trade = traded.get(symbol)
+            change = f"{trade.weight_before:+.0%} → {trade.weight_after:+.0%}" if trade else f"{weight:+.0%} (igual)"
+            rows.append((coin(symbol), change))
+        cost = sum(t.cost for t in self.trades)
+        return Card("🔄", f"Rebalanceo tendencia · {self.day}", tuple(rows), f"Costo de las operaciones: {cost:,.2f} USDT")
 
 
 def step_day(account: Account, close: pd.Series, prev_close: pd.Series | None, funding: pd.Series,
@@ -125,11 +149,11 @@ def pending_days(closes: pd.DataFrame, last_day: date | None) -> list[pd.Timesta
     return [d for d in complete if d.date() > last_day]
 
 
-def run_daily(settings: Settings) -> list[str]:
+def run_daily(settings: Settings) -> list[DayResult]:
     trend = settings.trend
     closes, funding = daily_closes(load_market(settings))
     targets = target_weights(closes, trend.long_only)
-    messages = []
+    results = []
     with db.connect() as conn:
         store = PaperStore(conn, trend.instance)
         account = store.load() or Account(trend.initial_capital)
@@ -139,29 +163,28 @@ def run_daily(settings: Settings) -> list[str]:
             equity, trades = step_day(account, closes.loc[day], prev, funding.loc[day], targets.loc[day], settings.backtest)
             store.save_day(account, day.date(), equity, trades)
             account.last_day = day.date()
-            weights = ", ".join(f"{s.split('/')[0]} {targets.loc[day, s]:+.0%}" for s in closes.columns)
-            changes = "; ".join(f"{t.symbol.split('/')[0]} {t.weight_before:+.0%}→{t.weight_after:+.0%}" for t in trades)
-            messages.append(f"{day.date()}: capital {equity:,.2f} | pesos {weights}"
-                            + (f" | rebalanceo: {changes}" if trades else " | sin cambios"))
-    for message in messages:
-        log.info("tendencia %s", message)
-    return messages
+            weights = {s: float(targets.loc[day, s]) for s in closes.columns}
+            results.append(DayResult(day.date(), equity, weights, trades))
+    for result in results:
+        log.info("tendencia %s", result.summary())
+    return results
 
 
 def run_and_notify(settings: Settings) -> int:
     """Lo que corre el scheduler: avisa por Telegram los rebalanceos y cualquier fallo."""
-    notifier = create_notifier(prefix=f"[{settings.trend.instance}] ")
+    notifier = create_notifier(source=settings.trend.instance)
     try:
-        messages = run_daily(settings)
+        results = run_daily(settings)
     except Exception as exc:  # noqa: BLE001 - el bot de rupturas sigue aunque este falle
         log.exception("tendencia: el ciclo diario falló")
-        notifier.send("critical", f"el ciclo diario falló: {type(exc).__name__}: {str(exc)[:300]}")
+        notifier.send("critical", f"el ciclo diario falló: {type(exc).__name__}: {str(exc)[:300]}",
+                      failure_card("el ciclo diario", exc))
         return 1
-    if not messages:
+    if not results:
         log.warning("tendencia: no hay cierre diario nuevo para procesar")
-    for message in messages:
-        if "rebalanceo" in message:
-            notifier.send("warning", message)
+    for result in results:
+        if result.trades:
+            notifier.send("warning", result.summary(), result.card(settings.trend.initial_capital))
     return 0
 
 

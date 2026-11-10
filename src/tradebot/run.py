@@ -25,7 +25,7 @@ from tradebot.live.cycle import Cycle, Snapshot
 from tradebot.live.store import LiveStore
 from tradebot.live.trend_paper import mark_to_market
 from tradebot.live.trend_paper import run_and_notify as run_trend
-from tradebot.notify import create_notifier
+from tradebot.notify import create_notifier, failure_card
 from tradebot.publish import publish
 
 log = logging.getLogger("tradebot.run")
@@ -37,12 +37,12 @@ def load_snapshot(settings: Settings) -> Snapshot:
 
 
 def run_once(settings: Settings) -> int:
-    notifier = create_notifier(prefix=f"[{settings.bot.instance}] ")
+    notifier = create_notifier(source=settings.bot.instance)
     try:
         events = _cycle(settings, notifier)
     except Exception as exc:  # noqa: BLE001 - cualquier fallo del ciclo se avisa; el scheduler sigue
         log.exception("el ciclo falló")
-        notifier.send("critical", f"el ciclo falló: {type(exc).__name__}: {str(exc)[:300]}")
+        notifier.send("critical", f"el ciclo falló: {type(exc).__name__}: {str(exc)[:300]}", failure_card("el ciclo", exc))
         try:
             with db.connect() as conn:
                 LiveStore(conn, settings.bot.instance).alert("critical", f"el ciclo falló: {exc}")

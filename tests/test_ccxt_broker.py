@@ -54,3 +54,18 @@ def test_notifier_failure_does_not_raise(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", boom)
     assert TelegramNotifier("token", "chat").send("critical", "prueba") is False
+
+
+def test_alert_renders_html_table_and_escapes_text():
+    from datetime import UTC, datetime
+
+    from tradebot.notify import Card, render
+
+    now = datetime(2026, 11, 9, 14, 2, tzinfo=UTC)
+    text = render("warning", "x", Card("🟢", "BTC LONG abierto", (("Entrada", "97,450.00"), ("Stop", "95,120.00"))),
+                  "binance-perp-v1", now)
+    assert "<b>BTC LONG abierto</b>" in text
+    assert "<pre>Entrada  97,450.00\nStop     95,120.00</pre>" in text
+    assert "binance-perp-v1 · 09 nov 14:02 UTC" in text
+    plain = render("critical", "base <caída> & reintento", None, "", now)
+    assert plain.startswith("🚨 <b>Crítico</b>") and "base &lt;caída&gt; &amp; reintento" in plain

@@ -266,10 +266,10 @@ def test_alerts_go_to_notifier_and_equity_is_recorded(approve):
     sent = []
 
     class Notifier:
-        def send(self, level, message):
-            sent.append(level)
+        def send(self, level, message, card=None):
+            sent.append((level, card.title if card else None))
 
     store, broker = FakeStore(), FakeBroker()
     Cycle(SETTINGS, store, broker, analyst=None, notifier=Notifier(), now=lambda: NOW).run(snapshot())
-    assert sent == ["warning"]  # la apertura de la posición; los eventos "info" no se envían
+    assert [level for level, _ in sent] == ["warning"]  # la apertura de la posición; los eventos "info" no se envían
     assert store.equity_history == [(NOW.replace(minute=0), 5000.0)]

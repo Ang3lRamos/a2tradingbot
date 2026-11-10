@@ -20,6 +20,7 @@ from tradebot.ai.review import review_signal
 from tradebot.broker.base import Broker, BrokerError, BrokerPosition
 from tradebot.config import Settings
 from tradebot.live.store import LiveStore, OpenPosition
+from tradebot.notify import Card, coin, price, signed
 from tradebot.risk import CLOSE_ONLY, entry_block_reason, position_qty, trailed_stop, update_risk_state
 from tradebot.strategy import LONG
 
@@ -67,6 +68,11 @@ def realized_pnl(side: str, qty: float, entry: float, exit_price: float) -> floa
     return (1 if side == "long" else -1) * qty * (exit_price - entry)
 
 
+def duration(delta) -> str:
+    hours = int(delta.total_seconds() // 3600)
+    return f"{hours // 24}d {hours % 24}h" if hours >= 24 else f"{hours}h"
+
+
 @dataclass
 class Cycle:
     settings: Settings
@@ -77,13 +83,22 @@ class Cycle:
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     events: list[str] = field(default_factory=list)
 
-    def _event(self, level: str, message: str) -> None:
+    def _event(self, level: str, message: str, card: Card | None = None) -> None:
         self.events.append(message)
         getattr(log, {"info": "info", "warning": "warning", "critical": "error"}[level])(message)
         if level != "info":
             self.store.alert(level, message)
             if self.notifier is not None:
-                self.notifier.send(level, message)
+                self.notifier.send(level, message, card)
+
+    def _close_card(self, position: OpenPosition, exit_price: float, pnl: float, reason: str) -> Card:
+        rows = [("Salida", price(exit_price)), ("Entrada", price(position.entry_price)), ("P&L", signed(pnl))]
+        risk = position.risk_distance * position.qty
+        if risk > 0:
+            rows.append(("Resultado", f"{pnl / risk:+.2f} R"))
+        rows.append(("Duración", duration(self.now() - position.opened_at)))
+        icon = "✅" if pnl >= 0 else "🔻"
+        return Card(icon, f"{coin(position.symbol)} {position.side.upper()} cerrado · {reason}", tuple(rows))
 
     # 1. Reconciliación
 
@@ -96,7 +111,8 @@ class Cycle:
             if fill:
                 pnl = realized_pnl(position.side, position.qty, position.entry_price, fill.price) - position.fees - fill.fee
                 self.store.close_position(position.id, fill.price, pnl, position.fees + fill.fee, "stop")
-                self._event("warning", f"{position.symbol}: posición cerrada por stop en {fill.price}, P&L {pnl:+.2f}")
+                self._event("warning", f"{position.symbol}: posición cerrada por stop en {fill.price}, P&L {pnl:+.2f}",
+                            self._close_card(position, fill.price, pnl, "stop"))
             else:
                 self.store.close_position(position.id, None, None, position.fees, "desconocido")
                 self._event("warning", f"{position.symbol}: la posición ya no existe en el exchange y no se encontró la ejecución")
@@ -145,7 +161,8 @@ class Cycle:
             self.store.record_order(position.id, fill.order_id, position.symbol,
                                     "sell" if position.side == "long" else "buy", "market", fill.qty, fill.price, "filled", fill.fee)
             self.store.close_position(position.id, fill.price, pnl, position.fees + fill.fee, reason)
-            self._event("critical", f"{position.symbol}: cerrada por {reason} en {fill.price}, P&L {pnl:+.2f}")
+            self._event("critical", f"{position.symbol}: cerrada por {reason} en {fill.price}, P&L {pnl:+.2f}",
+                        self._close_card(position, fill.price, pnl, reason))
 
     # 3. Vela nueva: trailing y entradas
 
@@ -196,7 +213,8 @@ class Cycle:
         risk = self.settings.risk
         distance = risk.stop_atr_multiple * atr
         reference = float(asset.candles.loc[bar, "close"])
-        qty = self.broker.round_qty(symbol, position_qty(self.broker.equity(), reference, distance, risk, size_multiplier))
+        equity = self.broker.equity()
+        qty = self.broker.round_qty(symbol, position_qty(equity, reference, distance, risk, size_multiplier))
         if qty <= 0 or qty * reference < self.broker.min_notional(symbol):
             self._event("info", f"{symbol}: tamaño {qty} demasiado chico para el mínimo del exchange; no se opera")
             return
@@ -215,7 +233,17 @@ class Cycle:
                                 fill.qty, fill.price, "filled", fill.fee)
         self.store.record_order(position_id, stop_id, symbol, "sell" if side == "long" else "buy", "stop_market",
                                 fill.qty, stop, "open", None)
-        self._event("warning", f"{symbol}: abierta {side} {fill.qty} en {fill.price}, stop {stop:.2f} (tamaño IA x{size_multiplier:.2f})")
+        at_risk = distance * fill.qty
+        card = Card("🟢" if side == "long" else "🔴", f"{coin(symbol)} {side.upper()} abierto", (
+            ("Entrada", price(fill.price)),
+            ("Stop", f"{price(stop)} ({(stop / fill.price - 1):+.1%})"),
+            ("Cantidad", f"{fill.qty:g}"),
+            ("Nominal", f"{fill.qty * fill.price:,.2f} USDT"),
+            ("Riesgo", f"{at_risk:,.2f} USDT ({at_risk / equity:.1%})" if equity > 0 else f"{at_risk:,.2f} USDT"),
+            ("Tamaño IA", f"x{size_multiplier:.2f}"),
+        ))
+        self._event("warning", f"{symbol}: abierta {side} {fill.qty} en {fill.price}, stop {stop:.2f} (tamaño IA x{size_multiplier:.2f})",
+                    card)
 
     # Ciclo completo
 
