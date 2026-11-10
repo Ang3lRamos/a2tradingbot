@@ -50,6 +50,8 @@ export type Position = {
   salida: number | null;
   pnl: number | null;
   comisiones: number | null;
+  /** Distancia inicial al stop en precio (1 R por unidad). */
+  riesgo?: number | null;
   tamano_ia: number;
   estado: "open" | "closed";
   motivo_salida: string | null;

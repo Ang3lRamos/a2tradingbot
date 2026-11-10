@@ -58,3 +58,16 @@ body {
 ::selection {
   background: color-mix(in srgb, var(--series-bot) 35%, transparent);
 }
+
+/* Destello breve cuando llega un precio nuevo. */
+@keyframes tick {
+  from { background: color-mix(in srgb, var(--series-bot) 28%, transparent); }
+  to { background: transparent; }
+}
+.tick {
+  border-radius: 2px;
+  animation: tick 0.8s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tick { animation: none; }
+}

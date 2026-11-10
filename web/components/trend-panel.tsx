@@ -2,6 +2,7 @@ import { num, pct, tone, utc } from "@/lib/format";
 import type { Trend } from "@/lib/types";
 
 import { Empty, Panel, Stat } from "./panel";
+import { LiveEquity } from "./positions-panel";
 
 /** Bot de tendencia largo/corto: capital, exposición por moneda y último rebalanceo. */
 export function TrendPanel({ trend }: { trend: Trend | null | undefined }) {
@@ -22,7 +23,7 @@ export function TrendPanel({ trend }: { trend: Trend | null | undefined }) {
   return (
     <Panel title="Tendencia L/S" aside="cuenta virtual">
       <div className="grid grid-cols-2 border-b border-line [&>*:first-child]:border-r [&>*:first-child]:border-line">
-        <Stat label="Capital" value={num(trend.capital_actual)} sub={`inicial ${num(trend.capital_inicial, 0)} USDT`} />
+        <Stat label="Capital ahora" value={<LiveEquity source="tendencia" trend={trend} />} sub={`inicial ${num(trend.capital_inicial, 0)} USDT`} />
         <Stat label="Retorno" value={pct(change)} valueClass={tone(change)} sub={`exposición ${pct(gross, 0, false)}`} />
       </div>
 

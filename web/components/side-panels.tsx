@@ -1,13 +1,15 @@
-import { num, pct, price, tone, utc } from "@/lib/format";
-import type { Ai, BotState, Live } from "@/lib/types";
+import { num, pct, tone, utc } from "@/lib/format";
+import type { Ai, BotState, Live, Market } from "@/lib/types";
 
 import { Empty, Panel, Stat } from "./panel";
+import { LiveEquity } from "./positions-panel";
 
-export function AccountPanel({ live, state }: { live: Live | null; state: BotState | null }) {
+export function AccountPanel({ live, state, markets }: { live: Live | null; state: BotState | null; markets: Market[] }) {
   return (
     <Panel title="Cuenta · rupturas" aside="Binance Demo">
       <div className="grid grid-cols-2 [&>*]:border-line [&>*:nth-child(odd)]:border-r [&>*:nth-child(-n+2)]:border-b">
-        <Stat label="Capital" value={num(live?.capital_actual)} sub="USDT" />
+        <Stat label="Capital ahora" value={<LiveEquity source="rupturas" live={live} markets={markets} />}
+          sub={`ciclo ${num(live?.capital_actual)}`} />
         <Stat label="Días en papel" value={num(live?.dias_en_papel, 1)} sub="meta: 30" />
         <Stat label="Abiertas" value={live?.posiciones_abiertas.length ?? 0} sub={`máx. 3`} />
         <Stat label="Cerradas" value={live?.operaciones_cerradas.length ?? 0} sub="meta: 100+" />
@@ -15,36 +17,6 @@ export function AccountPanel({ live, state }: { live: Live | null; state: BotSta
       <p className="border-t border-line px-3 py-2 text-[11px] leading-4 text-ink-faint">
         Último ciclo {utc(state?.ultimo_ciclo)} UTC. Con menos de 30 operaciones los resultados todavía no permiten concluir nada.
       </p>
-    </Panel>
-  );
-}
-
-export function PositionsPanel({ live }: { live: Live | null }) {
-  const open = live?.posiciones_abiertas ?? [];
-  return (
-    <Panel title="Posiciones · rupturas" aside={`${open.length} abiertas`}>
-      {open.length === 0 ? (
-        <Empty>Sin posiciones abiertas.</Empty>
-      ) : (
-        <table className="w-full text-[12px]">
-          <thead className="text-left text-[11px] text-ink-muted">
-            <tr><th className="px-3 py-1.5 font-normal">Par</th><th className="font-normal">Cant.</th><th className="font-normal">Entrada</th><th className="pr-3 text-right font-normal">Stop</th></tr>
-          </thead>
-          <tbody className="num">
-            {open.map((p) => (
-              <tr key={p.id} className="border-t border-line">
-                <td className="px-3 py-1.5">
-                  <span className="font-sans font-medium">{p.simbolo.split("/")[0]}</span>{" "}
-                  <span className={`font-sans text-[11px] uppercase ${p.lado === "long" ? "text-up" : "text-down"}`}>{p.lado === "long" ? "▲ long" : "▼ short"}</span>
-                </td>
-                <td>{num(p.cantidad, 4)}</td>
-                <td>{price(p.entrada)}</td>
-                <td className="pr-3 text-right">{price(p.stop)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </Panel>
   );
 }

@@ -1,35 +1,54 @@
+"use client";
+
 import { pct, price, tone } from "@/lib/format";
 import type { Market } from "@/lib/types";
 
+import { useLiveMarket } from "./live-market";
 import { Empty, Panel } from "./panel";
 
 export function Markets({ markets }: { markets: Market[] }) {
+  const { tickers, selected, select } = useLiveMarket();
   return (
-    <Panel title="Mercados" aside="perpetuos · 1h">
+    <Panel title="Mercados" aside="perpetuos · en vivo">
       {markets.length === 0 ? (
         <Empty>Sin datos de mercado.</Empty>
       ) : (
         <ul>
-          {markets.map((m) => (
-            <li key={m.simbolo} className="grid grid-cols-[3rem_1fr_4.5rem] items-center gap-2 border-b border-line px-3 py-2 last:border-b-0">
-              <div>
-                <div className="font-medium">{m.simbolo}</div>
-                <div className="text-[11px] text-ink-faint">USDT</div>
-              </div>
-              <Sparkline values={m.serie_24h} up={(m.cambio_24h ?? 0) >= 0} />
-              <div className="text-right">
-                <div className="num">{price(m.precio)}</div>
-                <div className={`num text-[11px] ${tone(m.cambio_24h)}`}>{pct(m.cambio_24h)}</div>
-              </div>
-            </li>
-          ))}
+          {markets.map((m) => {
+            const t = tickers[m.simbolo];
+            const last = t?.price ?? m.precio;
+            const change = t?.change24h ?? m.cambio_24h;
+            // La serie publicada termina en la última vela cerrada; se le agrega el precio de ahora.
+            const series = t ? [...m.serie_24h, t.price] : m.serie_24h;
+            return (
+              <li key={m.simbolo} className="border-b border-line last:border-b-0">
+                <button onClick={() => select(m.simbolo)} aria-pressed={selected === m.simbolo}
+                  className={`grid w-full grid-cols-[3rem_1fr_5rem] items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-panel-raised ${selected === m.simbolo ? "bg-panel-raised" : ""}`}>
+                  <div>
+                    <div className="font-medium">{m.simbolo}</div>
+                    <div className="text-[11px] text-ink-faint">USDT</div>
+                  </div>
+                  <Sparkline values={series} up={(change ?? 0) >= 0} />
+                  <div className="text-right">
+                    <LivePrice value={last} />
+                    <div className={`num text-[11px] ${tone(change)}`}>{pct(change)}</div>
+                  </div>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </Panel>
   );
 }
 
-/** Mini gráfico de las últimas 24 velas. Decorativo: el número a la derecha es el dato. */
+/** El precio parpadea en verde o rojo cuando cambia; `key` reinicia la animación. */
+function LivePrice({ value }: { value: number }) {
+  return <div key={value} className="num tick">{price(value)}</div>;
+}
+
+/** Mini gráfico de las últimas 24 velas más el precio en vivo. Decorativo: el número a la derecha es el dato. */
 function Sparkline({ values, up }: { values: number[]; up: boolean }) {
   if (values.length < 2) return <div />;
   const w = 100;

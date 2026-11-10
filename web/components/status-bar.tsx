@@ -2,6 +2,7 @@ import { pct, utc } from "@/lib/format";
 import type { BotState } from "@/lib/types";
 
 import { Heartbeat } from "./heartbeat";
+import { LiveBadge } from "./live-market";
 
 const MODES = {
   operar: { label: "Operando", dot: "bg-up", text: "text-up" },
@@ -50,8 +51,9 @@ export function StatusBar({ state, updated }: { state: BotState | null; updated:
       </Item>
 
       <div className="flex items-center gap-2 text-[11px] text-ink-faint sm:ml-auto">
+        <LiveBadge />
         <span className="rounded-[2px] border border-line-strong px-1.5 py-px uppercase tracking-wider">Papel</span>
-        <span className="num">datos {utc(updated)} UTC</span>
+        <span className="num" title="Los datos del bot se vuelven a pedir cada minuto">bot {utc(updated)} UTC</span>
       </div>
     </header>
   );
