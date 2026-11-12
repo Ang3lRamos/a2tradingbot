@@ -5,7 +5,8 @@ Uso:
     python -m tradebot.run --once     # un solo ciclo y termina
     python -m tradebot.run --reanudar # quita el kill switch o el modo solo cierre después de revisar a mano
 
-Además, a las 00:15 UTC corre el bot de tendencia en su cuenta virtual (tradebot.live.trend_paper).
+Además, a las 00:15 UTC corre el bot de tendencia en su cuenta virtual (tradebot.live.trend_paper),
+y el día 1 de cada mes manda su resumen mensual por Telegram (tradebot.live.trend_report).
 """
 
 import argparse
@@ -25,6 +26,7 @@ from tradebot.live.cycle import Cycle, Snapshot
 from tradebot.live.store import LiveStore
 from tradebot.live.trend_paper import mark_to_market
 from tradebot.live.trend_paper import run_and_notify as run_trend
+from tradebot.live.trend_report import send_monthly
 from tradebot.notify import create_notifier, failure_card
 from tradebot.publish import publish
 
@@ -101,7 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     scheduler.add_job(run_once, "cron", minute=2, args=[settings], max_instances=1, coalesce=True)
     # Después de la ingesta de las 00:02, que trae la última vela de 1h del día.
     scheduler.add_job(run_trend_and_publish, "cron", hour=0, minute=15, args=[settings], max_instances=1, coalesce=True)
-    log.info("bot en marcha: un ciclo a los 2 minutos de cada hora y tendencia a las 00:15 (UTC). Ctrl+C para detener.")
+    # El día 1, después del cierre diario de las 00:15: resumen del mes anterior.
+    scheduler.add_job(send_monthly, "cron", day=1, hour=0, minute=40, args=[settings], max_instances=1, coalesce=True)
+    log.info("bot en marcha: un ciclo a los 2 minutos de cada hora, tendencia a las 00:15 y resumen mensual "
+             "el día 1 a las 00:40 (UTC). Ctrl+C para detener.")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
