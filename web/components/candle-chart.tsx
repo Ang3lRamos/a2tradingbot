@@ -95,12 +95,14 @@ export function CandleChart({ symbol, interval, lines = [], markers = [], compac
     const line = (color: string, extra: Record<string, unknown> = {}, pane = 0) => chart.addSeries(LineSeries, {
       color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, ...extra,
     }, pane);
+    // Más gruesas que la mecha de las velas y con su nombre y valor en el eje, para que no se pierdan entre ellas.
+    const labeled = (title: string) => (compact ? {} : { lastValueVisible: true, title });
     const study: StudySeries = {
-      fast: showEma ? line(c.fast) : undefined,
-      slow: showEma ? line(c.slow) : undefined,
-      upper: showChannel ? line(c.bot, { lineStyle: LineStyle.Dashed }) : undefined,
-      lower: showChannel ? line(c.bot, { lineStyle: LineStyle.Dashed }) : undefined,
-      rsi: showRsi ? line(c.fast, { lastValueVisible: true }, 1) : undefined,
+      fast: showEma ? line(c.fast, { lineWidth: 2, ...labeled("EMA 50") }) : undefined,
+      slow: showEma ? line(c.slow, { lineWidth: 2, ...labeled("EMA 200") }) : undefined,
+      upper: showChannel ? line(c.bot, { lineWidth: 2, lineStyle: LineStyle.Dashed, ...labeled("Canal máx") }) : undefined,
+      lower: showChannel ? line(c.bot, { lineWidth: 2, lineStyle: LineStyle.Dashed, ...labeled("Canal mín") }) : undefined,
+      rsi: showRsi ? line(c.fast, { lineWidth: 2, ...labeled("RSI") }, 1) : undefined,
     };
     if (study.rsi) {
       for (const [level, color] of [[70, c.down], [30, c.up]] as const) {
