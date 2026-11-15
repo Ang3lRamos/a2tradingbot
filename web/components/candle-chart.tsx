@@ -1,15 +1,36 @@
 "use client";
 
 import {
-  CandlestickSeries, ColorType, createChart, createSeriesMarkers, CrosshairMode, HistogramSeries, LineStyle,
+  CandlestickSeries, ColorType, createChart, createSeriesMarkers, CrosshairMode, HistogramSeries, LineSeries, LineStyle,
   type IChartApi, type IPriceLine, type ISeriesApi, type ISeriesMarkersPluginApi, type SeriesMarker, type Time, type UTCTimestamp,
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 
-import { fetchCandles, INTERVAL_SECONDS, klineToCandle, openStream, pair, type Interval } from "@/lib/binance";
+import { type Candle, fetchCandles, INTERVAL_SECONDS, klineToCandle, openStream, pair, type Interval } from "@/lib/binance";
+import { donchian, ema, rsi } from "@/lib/indicators";
 
 export type ChartLine = { price: number; label: string; tone: "up" | "down" | "neutral" | "bot"; dashed?: boolean };
 export type ChartMarker = { at: string; side: "long" | "short"; kind: "entry" | "exit"; text?: string };
+/** Indicadores sobre el gráfico, con las fórmulas del bot: EMA 50/200, canal de 20 velas y RSI 14 en un panel aparte. */
+export type Studies = { ema?: boolean; channel?: boolean; rsi?: boolean };
+
+type StudySeries = { fast?: ISeriesApi<"Line">; slow?: ISeriesApi<"Line">; upper?: ISeriesApi<"Line">; lower?: ISeriesApi<"Line">; rsi?: ISeriesApi<"Line"> };
+
+function points(rows: Candle[], values: (number | null)[]) {
+  return rows.flatMap((r, i) => (values[i] == null ? [] : [{ time: r.time as UTCTimestamp, value: values[i]! }]));
+}
+
+function drawStudies(series: StudySeries, rows: Candle[]) {
+  const closes = rows.map((r) => r.close);
+  series.fast?.setData(points(rows, ema(closes, 50)));
+  series.slow?.setData(points(rows, ema(closes, 200)));
+  if (series.upper || series.lower) {
+    const channel = donchian(rows, 20);
+    series.upper?.setData(points(rows, channel.upper));
+    series.lower?.setData(points(rows, channel.lower));
+  }
+  series.rsi?.setData(points(rows, rsi(closes, 14)));
+}
 
 /** El canvas no entiende var(--x): se leen los tokens del tema una vez montado. */
 function palette() {
@@ -18,6 +39,7 @@ function palette() {
   return {
     panel: v("--panel"), line: v("--line"), lineStrong: v("--line-strong"), ink: v("--ink"), faint: v("--ink-faint"),
     muted: v("--ink-muted"), up: v("--up"), down: v("--down"), bot: v("--series-bot"),
+    fast: v("--study-fast"), slow: v("--study-slow"),
     font: `${v("--font-plex-mono")}, ui-monospace, monospace`,
   };
 }
@@ -25,14 +47,16 @@ function palette() {
 const TONE = { up: "up", down: "down", neutral: "muted", bot: "bot" } as const;
 
 /** Velas de Binance que se actualizan en vivo por websocket, con líneas de precio (entrada, stop) y marcas de operaciones. */
-export function CandleChart({ symbol, interval, lines = [], markers = [], compact = false, bars = 300 }: {
+export function CandleChart({ symbol, interval, lines = [], markers = [], compact = false, bars = 300, studies = {} }: {
   symbol: string;
   interval: Interval;
   lines?: ChartLine[];
   markers?: ChartMarker[];
   compact?: boolean;
   bars?: number;
+  studies?: Studies;
 }) {
+  const { ema: showEma = false, channel: showChannel = false, rsi: showRsi = false } = studies;
   const container = useRef<HTMLDivElement>(null);
   const chartRef = useRef<{ chart: IChartApi; candles: ISeriesApi<"Candlestick">; markers: ISeriesMarkersPluginApi<Time> } | null>(null);
   const [status, setStatus] = useState<"cargando" | "listo" | "error">("cargando");
@@ -68,6 +92,23 @@ export function CandleChart({ symbol, interval, lines = [], markers = [], compac
     // Hex con alfa (≈35%): el canvas no siempre acepta color-mix.
     const volumeColor = (open: number, close: number) => `${close >= open ? c.up : c.down}59`;
 
+    const line = (color: string, extra: Record<string, unknown> = {}, pane = 0) => chart.addSeries(LineSeries, {
+      color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, ...extra,
+    }, pane);
+    const study: StudySeries = {
+      fast: showEma ? line(c.fast) : undefined,
+      slow: showEma ? line(c.slow) : undefined,
+      upper: showChannel ? line(c.bot, { lineStyle: LineStyle.Dashed }) : undefined,
+      lower: showChannel ? line(c.bot, { lineStyle: LineStyle.Dashed }) : undefined,
+      rsi: showRsi ? line(c.fast, { lastValueVisible: true }, 1) : undefined,
+    };
+    if (study.rsi) {
+      for (const [level, color] of [[70, c.down], [30, c.up]] as const) {
+        study.rsi.createPriceLine({ price: level, color, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "" });
+      }
+      chart.panes()[1]?.setStretchFactor(0.28);
+    }
+
     chartRef.current = { chart, candles, markers: createSeriesMarkers(candles, []) };
     setStatus("cargando");
     setVersion((n) => n + 1);
@@ -79,6 +120,7 @@ export function CandleChart({ symbol, interval, lines = [], markers = [], compac
       .then((rows) => {
         candles.setData(rows.map((r) => ({ ...r, time: r.time as UTCTimestamp })));
         volume?.setData(rows.map((r) => ({ time: r.time as UTCTimestamp, value: r.volume, color: volumeColor(r.open, r.close) })));
+        drawStudies(study, rows);
         ready = true;
         setStatus("listo");
         close = openStream([`${pair(symbol).toLowerCase()}@kline_${interval}`], (_, d) => {
@@ -86,6 +128,11 @@ export function CandleChart({ symbol, interval, lines = [], markers = [], compac
           const time = k.time as UTCTimestamp;
           candles.update({ ...k, time });
           volume?.update({ time, value: k.volume, color: volumeColor(k.open, k.close) });
+          if (showEma || showChannel || showRsi) {
+            // La vela en formación se reemplaza; una nueva se agrega. Los indicadores se recalculan enteros (son pocas velas).
+            if (rows.at(-1)?.time === k.time) rows[rows.length - 1] = k; else rows.push(k);
+            drawStudies(study, rows);
+          }
         }, () => {});
       })
       .catch((err: unknown) => { if (!abort.signal.aborted && !ready) { console.error(err); setStatus("error"); } });
@@ -96,7 +143,7 @@ export function CandleChart({ symbol, interval, lines = [], markers = [], compac
       chartRef.current = null;
       chart.remove();
     };
-  }, [symbol, interval, compact, bars]);
+  }, [symbol, interval, compact, bars, showEma, showChannel, showRsi]);
 
   // Líneas de precio: se reemplazan enteras cuando cambian.
   const linesKey = JSON.stringify(lines);

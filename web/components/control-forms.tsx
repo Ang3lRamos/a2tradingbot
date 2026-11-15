@@ -8,6 +8,7 @@ import { num, pct, price, tone } from "@/lib/format";
 import type { ActionResult, BotState, Live, Market } from "@/lib/types";
 
 import { useLiveMarket } from "./live-market";
+import { MarketReading } from "./market-reading";
 import { unrealized } from "./positions-panel";
 
 type Props = { disabled: boolean; onSent: () => void };
@@ -108,7 +109,7 @@ function BotDial({ bot, label, current, effect, disabled, onSent }: Props & {
 // --- operación manual ---
 
 export function ManualTradeForm({ live, markets, disabled, onSent }: Props & { live: Live | null; markets: Market[] }) {
-  const { tickers } = useLiveMarket();
+  const { tickers, select } = useLiveMarket();
   const coins = markets.map((m) => m.simbolo);
   const suggested = (c: string) => Number((markets.find((m) => m.simbolo === c)?.stop_sugerido_pct ?? 2).toFixed(1));
   const [coin, setCoin] = useState(coins[0] ?? "BTC");
@@ -130,6 +131,7 @@ export function ManualTradeForm({ live, markets, disabled, onSent }: Props & { l
 
   function pick(c: string) {
     setCoin(c); setStopPct(suggested(c)); setConfirming(false); setResult(null);
+    select(c); // el gráfico principal pasa a esta moneda, con sus indicadores
   }
 
   async function submit() {
@@ -170,6 +172,8 @@ export function ManualTradeForm({ live, markets, disabled, onSent }: Props & { l
             onChange={(e) => { setStopPct(Number(e.target.value)); setConfirming(false); }} />
         </label>
       </div>
+
+      <MarketReading coin={coin} side={side} />
 
       <dl className="num mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
         <dt className="text-ink-faint">Precio ahora</dt><dd className="text-right">{px ? price(px) : "—"}</dd>

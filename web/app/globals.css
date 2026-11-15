@@ -17,9 +17,14 @@
   --warn: #e0a526;
   --series-bot: #3987e5;
   --series-btc: #d95926;
+  /* Indicadores del gráfico: violeta = EMA 50 y RSI, arena = EMA 200. El canal usa el azul del bot. */
+  --study-fast: #a78bfa;
+  --study-slow: #e5c07b;
 }
 
 @theme inline {
+  --color-study-fast: var(--study-fast);
+  --color-study-slow: var(--study-slow);
   --color-bg: var(--bg);
   --color-panel: var(--panel);
   --color-panel-raised: var(--panel-raised);

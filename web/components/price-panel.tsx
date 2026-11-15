@@ -6,15 +6,21 @@ import { base, type Interval } from "@/lib/binance";
 import { pct, price, tone } from "@/lib/format";
 import type { Live, Trend } from "@/lib/types";
 
-import { CandleChart, type ChartLine, type ChartMarker } from "./candle-chart";
+import { CandleChart, type ChartLine, type ChartMarker, type Studies } from "./candle-chart";
 import { useLiveMarket } from "./live-market";
 
 const INTERVALS: Interval[] = ["15m", "1h", "4h", "1d"];
+const STUDIES: { key: keyof Studies; label: string; swatch: string; title: string }[] = [
+  { key: "ema", label: "EMA 50/200", swatch: "bg-study-fast", title: "Medias exponenciales de 50 (violeta) y 200 (arena) velas" },
+  { key: "channel", label: "Canal 20", swatch: "bg-series-bot", title: "Máximo y mínimo de las 20 velas anteriores: el bot de rupturas entra al cerrar fuera de él (en 4h)" },
+  { key: "rsi", label: "RSI 14", swatch: "bg-study-fast", title: "Índice de fuerza relativa; 70 sobrecompra, 30 sobreventa" },
+];
 
 /** Gráfico de velas en vivo de la moneda elegida, con las posiciones y operaciones de los dos bots encima. */
 export function PricePanel({ symbols, live, trend }: { symbols: string[]; live: Live | null; trend: Trend | null }) {
   const { tickers, selected, select } = useLiveMarket();
   const [interval, setTimeframe] = useState<Interval>("4h");
+  const [studies, setStudies] = useState<Studies>({ ema: true, channel: true, rsi: false });
   const ticker = tickers[selected];
 
   const open = (live?.posiciones_abiertas ?? []).filter((p) => base(p.simbolo) === selected);
@@ -57,8 +63,21 @@ export function PricePanel({ symbols, live, trend }: { symbols: string[]; live: 
           ))}
         </div>
       </header>
-      <div className="h-[360px]">
-        <CandleChart symbol={selected} interval={interval} lines={lines} markers={markers} />
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-1 text-[11px]">
+        <span className="text-ink-faint">Indicadores</span>
+        {STUDIES.map((s) => (
+          <button key={s.key} type="button" aria-pressed={Boolean(studies[s.key])} title={s.title}
+            onClick={() => setStudies((v) => ({ ...v, [s.key]: !v[s.key] }))}
+            className={`flex items-center gap-1.5 rounded-[3px] border px-1.5 py-px ${studies[s.key] ? "border-line-strong text-ink" : "border-transparent text-ink-faint hover:text-ink"}`}>
+            <span className={`h-0.5 w-2.5 rounded-full ${s.swatch} ${studies[s.key] ? "" : "opacity-40"}`} />
+            {s.label}
+          </button>
+        ))}
+        {interval !== "4h" && studies.channel ? <span className="text-ink-faint">· el bot usa el canal en 4h</span> : null}
+      </div>
+      <div className={studies.rsi ? "h-[440px]" : "h-[360px]"}>
+        {/* 1000 velas: la EMA de 200 necesita historia para coincidir con la del bot. */}
+        <CandleChart symbol={selected} interval={interval} lines={lines} markers={markers} bars={1000} studies={studies} />
       </div>
       <p className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-3 py-1.5 text-[11px] text-ink-faint">
         <span><span className="text-up">▲</span>/<span className="text-down">▼</span> L, S: entradas de rupturas · ● salida</span>
