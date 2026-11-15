@@ -22,10 +22,12 @@ Desde tu PC, copia el `.env` y la llave privada sin pasar por GitHub:
 
 ```bash
 scp .env usuario@IP_DEL_VPS:~/a2tradingbot/.env
-scp C:/Users/angel/.keys/binance-demo/id_ed25519 usuario@IP_DEL_VPS:~/a2tradingbot/secrets/id_ed25519
+scp RUTA/A/TU/id_ed25519 usuario@IP_DEL_VPS:~/a2tradingbot/secrets/id_ed25519   # solo si usas llave Ed25519
 ```
 
 En el VPS: `chmod 600 .env secrets/id_ed25519`.
+
+Si la base es nueva, crea el esquema una vez (desde tu PC o con `docker compose run --rm bot python -m tradebot.setup_db`).
 
 ## 3. Claude en el servidor
 
@@ -66,7 +68,7 @@ El dashboard web (`web/`) se despliega en Vercel y lee los datos que el bot publ
 | Ver logs | `docker compose logs -f bot` |
 | Un ciclo manual | `docker compose run --rm bot python -m tradebot.run --once` |
 | Reanudar tras kill switch (después de revisar) | `docker compose run --rm bot python -m tradebot.run --reanudar` |
-| Actualizar el código | `git pull && docker compose up -d --build` |
+| Actualizar el código | `git pull && docker compose run --rm bot python -m tradebot.setup_db && docker compose up -d --build` |
 | Detener | `docker compose down` |
 
 Corre el bot en un solo lugar a la vez: si queda corriendo en tu PC y en el VPS, los dos operan la misma cuenta.

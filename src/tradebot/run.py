@@ -124,6 +124,9 @@ def run_trend_and_publish(settings: Settings) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    # APScheduler anota cada ejecución; con la revisión de órdenes cada minuto llenaría el log.
+    # Los trabajos ya registran lo que hacen, y los errores siguen saliendo (nivel WARNING).
+    logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(description="Bot de trading en la cuenta demo")
     parser.add_argument("--once", action="store_true", help="un solo ciclo")
     parser.add_argument("--reanudar", action="store_true", help="quitar kill switch / solo cierre")

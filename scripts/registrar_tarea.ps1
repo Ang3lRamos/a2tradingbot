@@ -1,6 +1,5 @@
-# Registra el bot en el Programador de tareas para que arranque al iniciar sesion,
-# con la misma configuracion que los bots mt5bot: 1 minuto de espera, sin limite de tiempo,
-# tambien con bateria. Luego lo arranca de inmediato.
+# Registra el bot en el Programador de tareas para que arranque al iniciar sesion:
+# 1 minuto de espera, sin limite de tiempo y tambien con bateria. Luego lo arranca de inmediato.
 #
 # Uso:    powershell -NoProfile -ExecutionPolicy Bypass -File scripts\registrar_tarea.ps1
 # Quitar: Unregister-ScheduledTask -TaskName tradebot -Confirm:$false

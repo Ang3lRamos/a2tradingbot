@@ -15,6 +15,7 @@ import secrets
 import sys
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 
 from psycopg import sql
 from psycopg.types.json import Jsonb
@@ -24,7 +25,6 @@ from tradebot.config import Settings, load_settings
 
 log = logging.getLogger("tradebot.publish")
 SLOW_REFRESH = timedelta(hours=24)
-PROJECT_REF = "qvzketramsyskygyqjac"
 ROOT = Path(__file__).resolve().parents[2]
 READER_SQL = ROOT / "sql" / "005_dashboard_reader.sql"
 CONTROLS_SQL = ROOT / "sql" / "007_controls.sql"
@@ -82,8 +82,17 @@ def create_role(role: str, script: Path) -> str:
         conn.execute(script.read_text(encoding="utf-8"))
         conn.execute(sql.SQL("alter role {} with password {}").format(sql.Identifier(role), sql.Literal(password)))
         conn.commit()
-    host = db.load_database_url().rsplit("@", 1)[1]
-    return f"postgresql://{role}.{PROJECT_REF}:{password}@{host}"
+    return role_url(db.load_database_url(), role, password)
+
+
+def role_url(database_url: str, role: str, password: str) -> str:
+    """Misma conexión que DATABASE_URL pero con otro usuario. En el pooler de Supabase el usuario
+    lleva el proyecto como sufijo (postgres.<proyecto>): se conserva ese sufijo."""
+    parts = urlsplit(database_url)
+    suffix = parts.username.partition(".")[2] if parts.username else ""
+    user = f"{role}.{suffix}" if suffix else role
+    netloc = f"{user}:{quote(password, safe='')}@{parts.hostname}" + (f":{parts.port}" if parts.port else "")
+    return parts._replace(netloc=netloc).geturl()
 
 
 def main(argv: list[str] | None = None) -> int:
