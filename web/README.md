@@ -7,4 +7,5 @@ npm install
 npm run dev      # http://localhost:3000
 ```
 
-Variable requerida en `.env.local` (y en Vercel): `DASHBOARD_DATABASE_URL`. Ver el README principal.
+Variable requerida en `.env.local` (y en Vercel): `DASHBOARD_DATABASE_URL`. Para el panel de control, además:
+`DASHBOARD_OPERATOR_URL`, `CONTROL_PASSWORD` y `CONTROL_SESSION_SECRET`. Ver el README principal.

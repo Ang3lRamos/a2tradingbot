@@ -17,8 +17,9 @@ import pandas as pd
 
 from tradebot import db
 from tradebot.backtest.data import load_market
-from tradebot.backtest.trend import REBALANCE_BAND, daily_closes, target_weights
+from tradebot.backtest.trend import REBALANCE_BAND, daily_closes, scale_targets, target_weights
 from tradebot.config import BacktestSettings, Settings, load_settings
+from tradebot.live.controls import aggressiveness_at, load_changes
 from tradebot.notify import Card, coin, create_notifier, failure_card
 
 log = logging.getLogger(__name__)
@@ -155,6 +156,8 @@ def run_daily(settings: Settings) -> list[DayResult]:
     targets = target_weights(closes, trend.long_only)
     results = []
     with db.connect() as conn:
+        # Agresividad del dashboard vigente en cada cierre (1 = la estrategia tal como se probó).
+        targets = scale_targets(targets, aggressiveness_at(load_changes(conn, trend.instance), closes.index))
         store = PaperStore(conn, trend.instance)
         account = store.load() or Account(trend.initial_capital)
         for day in pending_days(closes, account.last_day):

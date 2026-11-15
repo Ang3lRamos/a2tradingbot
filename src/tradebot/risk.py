@@ -52,14 +52,17 @@ def update_risk_state(state: RiskState, equity: float, today: date, risk: RiskSe
     return RiskUpdate(state, events, False)
 
 
-def entry_block_reason(state: RiskState, open_symbols: set[str], symbol: str, risk: RiskSettings) -> str | None:
+def entry_block_reason(state: RiskState, open_symbols: set[str], symbol: str, risk: RiskSettings,
+                       counted: int | None = None) -> str | None:
+    """`counted`: posiciones que cuentan para el máximo (las del bot; las manuales no le quitan cupo).
+    Sin él, cuentan todas. `open_symbols` siempre incluye todas: el exchange es de una posición por moneda."""
     if state.kill_switch:
         return "kill switch activo"
     if state.mode != OPERATE:
         return f"modo {state.mode} ({state.mode_reason})"
     if symbol in open_symbols:
         return "ya hay una posición en este símbolo"
-    if len(open_symbols) >= risk.max_open_positions:
+    if (len(open_symbols) if counted is None else counted) >= risk.max_open_positions:
         return f"máximo de {risk.max_open_positions} posiciones abiertas"
     return None
 

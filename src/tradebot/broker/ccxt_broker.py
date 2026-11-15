@@ -48,6 +48,12 @@ class CCXTBroker:
     def min_notional(self, symbol: str) -> float:
         return float(self.exchange.market(symbol)["limits"]["cost"]["min"] or 0)
 
+    def last_price(self, symbol: str) -> float:
+        try:
+            return float(self.exchange.fetch_ticker(symbol)["last"])
+        except (ccxt.BaseError, TypeError) as exc:
+            raise BrokerError(f"no se pudo leer el precio de {symbol}: {exc}") from exc
+
     def _fill(self, order: dict, qty: float) -> Fill:
         """Datos de una orden YA ejecutada. Nunca lanza: si una consulta falla, se usa lo que haya."""
         price = order.get("average") or order.get("price")

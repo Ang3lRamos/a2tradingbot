@@ -1,6 +1,6 @@
 import "server-only";
 
-import { cacheLife } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 import { Pool } from "pg";
 
 import type { DashboardData } from "./types";
@@ -8,13 +8,18 @@ import type { DashboardData } from "./types";
 // Usuario de solo lectura: solo puede leer dashboard_snapshots (ver sql/005_dashboard_reader.sql).
 let pool: Pool | undefined;
 
-const EMPTY: DashboardData = { resumen: null, ia: null, backtest_is: null, backtest_oos: null, actualizado: null, error: null };
+const EMPTY: DashboardData = {
+  resumen: null, ia: null, backtest_is: null, backtest_oos: null, proyeccion: null, actualizado: null, error: null,
+};
+export const DASHBOARD_TAG = "dashboard";
 
 export async function getDashboardData(): Promise<DashboardData> {
   "use cache";
   // Caché corta (expira en 2 min): Next la excluye del prerender y cada visita lee la base.
   // Con "minutes" Vercel servía la copia vieja a la primera visita tras horas sin tráfico.
   cacheLife({ stale: 60, revalidate: 60, expire: 120 });
+  // Cuando el panel de control ve una orden ejecutada, updateTag(DASHBOARD_TAG) fuerza una lectura nueva.
+  cacheTag(DASHBOARD_TAG);
 
   const connectionString = process.env.DASHBOARD_DATABASE_URL;
   if (!connectionString) {
@@ -33,6 +38,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       ia: (byKey.ia as DashboardData["ia"]) ?? null,
       backtest_is: (byKey.backtest_is as DashboardData["backtest_is"]) ?? null,
       backtest_oos: (byKey.backtest_oos as DashboardData["backtest_oos"]) ?? null,
+      proyeccion: (byKey.proyeccion as DashboardData["proyeccion"]) ?? null,
       actualizado: resumen ? resumen.updated_at.toISOString() : null,
       error: null,
     };

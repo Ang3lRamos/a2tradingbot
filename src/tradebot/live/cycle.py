@@ -81,6 +81,7 @@ class Cycle:
     analyst: AIAnalyst
     notifier: object = None  # TelegramNotifier o NullNotifier; None = solo log y tabla alerts
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
+    aggressiveness: float = 1.0  # multiplicador del riesgo por operación, desde el dashboard (1 = el del backtest)
     events: list[str] = field(default_factory=list)
 
     def _event(self, level: str, message: str, card: Card | None = None) -> None:
@@ -154,15 +155,20 @@ class Cycle:
 
     def close_all(self, reason: str) -> None:
         for position in self.store.open_positions():
-            if position.stop_order_id:
-                self.broker.cancel_stop(position.symbol, position.stop_order_id)
-            fill = self.broker.market_close(position.symbol, position.side, position.qty)
-            pnl = realized_pnl(position.side, position.qty, position.entry_price, fill.price) - position.fees - fill.fee
-            self.store.record_order(position.id, fill.order_id, position.symbol,
-                                    "sell" if position.side == "long" else "buy", "market", fill.qty, fill.price, "filled", fill.fee)
-            self.store.close_position(position.id, fill.price, pnl, position.fees + fill.fee, reason)
-            self._event("critical", f"{position.symbol}: cerrada por {reason} en {fill.price}, P&L {pnl:+.2f}",
-                        self._close_card(position, fill.price, pnl, reason))
+            self.close_position(position, reason, "critical")
+
+    def close_position(self, position: OpenPosition, reason: str, level: str = "warning") -> float:
+        """Cierra a mercado (primero cancela su stop) y devuelve el P&L neto."""
+        if position.stop_order_id:
+            self.broker.cancel_stop(position.symbol, position.stop_order_id)
+        fill = self.broker.market_close(position.symbol, position.side, position.qty)
+        pnl = realized_pnl(position.side, position.qty, position.entry_price, fill.price) - position.fees - fill.fee
+        self.store.record_order(position.id, fill.order_id, position.symbol,
+                                "sell" if position.side == "long" else "buy", "market", fill.qty, fill.price, "filled", fill.fee)
+        self.store.close_position(position.id, fill.price, pnl, position.fees + fill.fee, reason)
+        self._event(level, f"{position.symbol}: cerrada por {reason} en {fill.price}, P&L {pnl:+.2f}",
+                    self._close_card(position, fill.price, pnl, reason))
+        return pnl
 
     # 3. Vela nueva: trailing y entradas
 
@@ -187,8 +193,10 @@ class Cycle:
                 continue
             row = signals.loc[bar]
             side = "long" if int(row["direction"]) == LONG else "short"
-            open_symbols = {p.symbol for p in self.store.open_positions()}
-            blocked = entry_block_reason(state, open_symbols, symbol, self.settings.risk)
+            open_now = self.store.open_positions()
+            open_symbols = {p.symbol for p in open_now}
+            bot_open = sum(1 for p in open_now if p.origin == "bot")
+            blocked = entry_block_reason(state, open_symbols, symbol, self.settings.risk, bot_open)
             signal_id = self.store.new_signal(snapshot.strategy, symbol, snapshot.timeframe, bar.to_pydatetime(),
                                               side, float(row["score"]), row["reason"])
             if signal_id is None:
@@ -213,11 +221,19 @@ class Cycle:
         risk = self.settings.risk
         distance = risk.stop_atr_multiple * atr
         reference = float(asset.candles.loc[bar, "close"])
+        # La agresividad escala el riesgo por operación; el tope de nocional (1x) no cambia.
+        scaled = replace(risk, risk_per_trade=risk.risk_per_trade * self.aggressiveness)
+        self.execute_entry(symbol, side, reference, distance, scaled, size_multiplier, signal_id)
+
+    def execute_entry(self, symbol: str, side: str, reference: float, distance: float, risk,
+                      size_multiplier: float = 1.0, signal_id: int | None = None, origin: str = "bot") -> str | None:
+        """Tamaño por riesgo, orden a mercado y stop en el exchange. Devuelve None si abrió, o el motivo si no."""
         equity = self.broker.equity()
         qty = self.broker.round_qty(symbol, position_qty(equity, reference, distance, risk, size_multiplier))
         if qty <= 0 or qty * reference < self.broker.min_notional(symbol):
-            self._event("info", f"{symbol}: tamaño {qty} demasiado chico para el mínimo del exchange; no se opera")
-            return
+            reason = f"tamaño {qty} demasiado chico para el mínimo del exchange"
+            self._event("info", f"{symbol}: {reason}; no se opera")
+            return reason
         fill = self.broker.market_open(symbol, side, qty)
         stop = fill.price - distance if side == "long" else fill.price + distance
         try:
@@ -226,24 +242,27 @@ class Cycle:
             # Nunca dejar una posición sin stop: se cierra de inmediato.
             close = self.broker.market_close(symbol, side, fill.qty)
             self._event("critical", f"{symbol}: falló el stop ({exc}); posición cerrada en {close.price}")
-            return
+            return f"falló el stop ({exc}); posición cerrada"
         position_id = self.store.insert_position(signal_id, symbol, side, fill.qty, fill.price, stop, distance,
-                                                 size_multiplier, stop_id, fill.fee)
+                                                 size_multiplier, stop_id, fill.fee, origin, self.aggressiveness
+                                                 if origin == "bot" else 1.0)
         self.store.record_order(position_id, fill.order_id, symbol, "buy" if side == "long" else "sell", "market",
                                 fill.qty, fill.price, "filled", fill.fee)
         self.store.record_order(position_id, stop_id, symbol, "sell" if side == "long" else "buy", "stop_market",
                                 fill.qty, stop, "open", None)
         at_risk = distance * fill.qty
-        card = Card("🟢" if side == "long" else "🔴", f"{coin(symbol)} {side.upper()} abierto", (
+        label = " · manual" if origin == "manual" else ""
+        card = Card("🟢" if side == "long" else "🔴", f"{coin(symbol)} {side.upper()} abierto{label}", (
             ("Entrada", price(fill.price)),
             ("Stop", f"{price(stop)} ({(stop / fill.price - 1):+.1%})"),
             ("Cantidad", f"{fill.qty:g}"),
             ("Nominal", f"{fill.qty * fill.price:,.2f} USDT"),
             ("Riesgo", f"{at_risk:,.2f} USDT ({at_risk / equity:.1%})" if equity > 0 else f"{at_risk:,.2f} USDT"),
-            ("Tamaño IA", f"x{size_multiplier:.2f}"),
+            ("Tamaño IA", f"x{size_multiplier:.2f}") if origin == "bot" else ("Origen", "manual, desde el dashboard"),
         ))
-        self._event("warning", f"{symbol}: abierta {side} {fill.qty} en {fill.price}, stop {stop:.2f} (tamaño IA x{size_multiplier:.2f})",
-                    card)
+        detail = f"tamaño IA x{size_multiplier:.2f}" if origin == "bot" else "manual"
+        self._event("warning", f"{symbol}: abierta {side} {fill.qty} en {fill.price}, stop {stop:.2f} ({detail})", card)
+        return None
 
     # Ciclo completo
 

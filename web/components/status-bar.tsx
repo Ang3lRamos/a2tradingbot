@@ -45,7 +45,9 @@ export function StatusBar({ state, updated }: { state: BotState | null; updated:
 
       <Item label="Riesgo">
         <span className="num">
-          {pct(state?.riesgo_por_operacion, 1, false)}
+          {pct(state?.riesgo_por_operacion != null ? state.riesgo_por_operacion * (state.agresividad?.rupturas ?? 1) : null, 2, false)}
+          {state?.agresividad && state.agresividad.rupturas !== 1
+            ? <span className="text-warn"> ×{state.agresividad.rupturas}</span> : null}
           <span className="text-ink-faint"> · kill {pct(state?.kill_switch_pct, 0, false)}</span>
         </span>
       </Item>

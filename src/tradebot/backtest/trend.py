@@ -59,6 +59,13 @@ def target_weights(closes: pd.DataFrame, long_only: bool) -> pd.DataFrame:
     return weights.div(gross.clip(lower=1.0), axis=0)  # si la suma pasa de 1, se reduce todo en proporción
 
 
+def scale_targets(targets: pd.DataFrame, multiplier: pd.Series | float) -> pd.DataFrame:
+    """Pesos objetivo × agresividad, con la suma de exposiciones otra vez topada en 1 (sin apalancamiento)."""
+    scaled = targets.mul(multiplier, axis=0) if isinstance(multiplier, pd.Series) else targets * multiplier
+    gross = scaled.abs().sum(axis=1)
+    return scaled.div(gross.clip(lower=1.0), axis=0)
+
+
 def simulate(closes: pd.DataFrame, funding: pd.DataFrame, targets: pd.DataFrame, costs: BacktestSettings,
              start: pd.Timestamp) -> TrendResult:
     returns = closes.pct_change().fillna(0.0)

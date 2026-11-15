@@ -21,8 +21,9 @@ import pandas as pd
 
 from tradebot import db
 from tradebot.backtest.data import load_market
-from tradebot.backtest.trend import daily_closes, simulate, target_weights
+from tradebot.backtest.trend import daily_closes, scale_targets, simulate, target_weights
 from tradebot.config import Settings, load_settings
+from tradebot.live.controls import aggressiveness_at, load_changes
 from tradebot.notify import Card, create_notifier, failure_card
 
 log = logging.getLogger(__name__)
@@ -133,6 +134,7 @@ def load_report(settings: Settings, month: pd.Period) -> MonthlyReport | None:
         last_day = conn.execute("select last_day from paper_accounts where instance = %s", (instance,)).fetchone()
         trade_ts = [r[0] for r in conn.execute(
             "select distinct ts from paper_trades where instance = %s", (instance,)).fetchall()]
+        changes = load_changes(conn, instance)
     if not rows or last_day is None:
         return None
     snapshots = pd.Series({pd.Timestamp(ts): float(eq) for ts, eq in rows}).sort_index()
@@ -143,7 +145,8 @@ def load_report(settings: Settings, month: pd.Period) -> MonthlyReport | None:
     daily = daily[daily.index <= last]
 
     closes, funding = daily_closes(load_market(settings))
-    targets = target_weights(closes, settings.trend.long_only)
+    # Con la misma agresividad que tuvo la cuenta cada día: la fidelidad mide la ejecución, no el ajuste.
+    targets = scale_targets(target_weights(closes, settings.trend.long_only), aggressiveness_at(changes, closes.index))
     costs = replace(settings.backtest, initial_capital=initial)
     replay = simulate(closes.loc[:last], funding.loc[:last], targets.loc[:last], costs, daily.index[0]).equity
     btc_col = next((c for c in closes.columns if c.startswith("BTC/")), None)

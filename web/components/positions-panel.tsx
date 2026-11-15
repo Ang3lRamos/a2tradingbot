@@ -83,7 +83,9 @@ function BreakoutCard({ p }: { p: Position }) {
       <button onClick={() => select(coin)} className="flex w-full items-center gap-2 px-3 pt-2 text-left" title="Ver en el gráfico principal">
         <span className="font-medium">{coin}</span>
         <span className={`text-[11px] font-medium uppercase ${long ? "text-up" : "text-down"}`}>{long ? "▲ long" : "▼ short"}</span>
-        <span className="num text-[11px] text-ink-faint">{num(p.cantidad, 4)} · x{num(p.tamano_ia, 2)} IA</span>
+        <span className="num text-[11px] text-ink-faint">
+          {num(p.cantidad, 4)} · {p.origen === "manual" ? <span className="font-sans uppercase text-ink-muted">manual</span> : `x${num(p.tamano_ia, 2)} IA`}
+        </span>
         <span className="num ml-auto text-[11px] text-ink-faint">{hours != null ? (hours < 48 ? `${hours.toFixed(1)} h` : `${(hours / 24).toFixed(1)} d`) : ""}</span>
       </button>
       <div className="grid grid-cols-3 [&>*:not(:last-child)]:border-r [&>*]:border-line">

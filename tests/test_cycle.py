@@ -44,6 +44,9 @@ class FakeBroker:
     def min_notional(self, symbol):
         return 5.0
 
+    def last_price(self, symbol):
+        return 100.0
+
     def market_open(self, symbol, side, qty):
         self.live[symbol] = BrokerPosition(symbol, side, qty, 100.0)
         return Fill(self._id(), 100.0, qty, 0.05)
@@ -93,12 +96,14 @@ class FakeStore:
 
     def open_positions(self):
         return [OpenPosition(i, p["symbol"], p["side"], p["qty"], p["entry"], p["stop"], p["distance"], p["stop_id"],
-                             p["opened_at"], p["fees"]) for i, p in self.positions.items() if p["status"] == "open"]
+                             p["opened_at"], p["fees"], p["origin"]) for i, p in self.positions.items() if p["status"] == "open"]
 
-    def insert_position(self, signal_id, symbol, side, qty, entry, stop, distance, size, stop_id, fees):
+    def insert_position(self, signal_id, symbol, side, qty, entry, stop, distance, size, stop_id, fees,
+                        origin="bot", aggressiveness=1.0):
         pid = len(self.positions) + 1
         self.positions[pid] = dict(symbol=symbol, side=side, qty=qty, entry=entry, stop=stop, distance=distance,
-                                   stop_id=stop_id, opened_at=NOW, fees=fees, status="open", size=size)
+                                   stop_id=stop_id, opened_at=NOW, fees=fees, status="open", size=size,
+                                   origin=origin, aggressiveness=aggressiveness)
         return pid
 
     def update_stop(self, pid, stop, stop_id):

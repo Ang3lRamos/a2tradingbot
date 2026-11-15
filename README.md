@@ -128,11 +128,20 @@ Para desplegarlo:
 2. En Vercel, importa el repo con **Root Directory** `web`.
 3. Agrega la variable `DASHBOARD_DATABASE_URL`.
 
+### Panel de control
+
+Detrás de una contraseña, el dashboard permite ajustar la **agresividad** de cada bot (×0,25 a ×2; ×1 es el backtest) y abrir o cerrar **operaciones manuales** en Binance Demo. El dashboard nunca toca el exchange: deja una orden pendiente en la tabla `commands` y el bot la valida con sus reglas de riesgo y la ejecuta en menos de un minuto (si espera más de 10 minutos, se rechaza). Las operaciones manuales llevan stop obligatorio, se marcan como `manual` y no entran en las métricas de la estrategia.
+
+1. `python -m tradebot.publish --crear-operador`: aplica `sql/007_controls.sql` y crea el usuario `dashboard_operator`, que solo puede crear órdenes pendientes y leer su estado.
+2. En Vercel agrega `DASHBOARD_OPERATOR_URL`, `CONTROL_PASSWORD` y `CONTROL_SESSION_SECRET` (32+ caracteres). Sin ellas, el panel queda apagado.
+
+El capital de cada cuenta también se compara contra la **ruta proyectada**: la banda de 10 a 90% que esperaba el backtest (bootstrap por bloques de 20 días), en el botón "vs proyección" del panel de capital.
+
 ## Estructura
 
 ```
 config/settings.toml          parámetros de los bots, IA, riesgo y backtest
-sql/                          esquema de Supabase (001-006)
+sql/                          esquema de Supabase (001-007)
 src/tradebot/
   data/, ingest.py            descarga paginada e idempotente de velas y contexto
   features/, strategy.py      indicadores sin look-ahead y señales

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 
 import { BottomTabs } from "@/components/bottom-tabs";
+import { ControlPanel } from "@/components/control-panel";
 import { EquityPanel } from "@/components/equity-panel";
 import { LiveMarketProvider } from "@/components/live-market";
 import { Markets } from "@/components/markets";
@@ -51,12 +52,14 @@ async function Dashboard() {
 
           <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-px lg:bg-line [&>*:last-child]:flex-1">
             <Slot order="order-1"><PricePanel symbols={symbols} live={live} trend={trend} /></Slot>
-            <Slot order="order-3"><EquityPanel live={live} trend={trend} backtestIs={data.backtest_is} backtestOos={data.backtest_oos} /></Slot>
+            <Slot order="order-3"><EquityPanel live={live} trend={trend} backtestIs={data.backtest_is} backtestOos={data.backtest_oos}
+              projections={data.proyeccion} /></Slot>
             <Slot order="order-4"><BottomTabs live={live} backtestIs={data.backtest_is} backtestOos={data.backtest_oos} /></Slot>
           </div>
 
           <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-px lg:bg-line [&>*:last-child]:flex-1">
             <Slot order="order-2"><PositionsPanel live={live} trend={trend} /></Slot>
+            <Slot order="order-3"><ControlPanel state={state} live={live} markets={markets} /></Slot>
             <Slot order="order-7"><TrendPanel trend={trend} /></Slot>
             <Slot order="order-8"><AiPanel ai={data.ia} /></Slot>
           </div>

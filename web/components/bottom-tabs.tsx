@@ -7,18 +7,20 @@ import type { Alert, Backtest, Live, Metrics } from "@/lib/types";
 
 import { Empty } from "./panel";
 import { rMultiple } from "./pnl-summary";
+import { ResultsPanel } from "./results-panel";
 
-type Tab = "operaciones" | "alertas" | "metricas";
+type Tab = "resultados" | "operaciones" | "alertas" | "metricas";
 
 export function BottomTabs({ live, backtestIs, backtestOos }: {
   live: Live | null;
   backtestIs: Backtest | null;
   backtestOos: Backtest | null;
 }) {
-  const [tab, setTab] = useState<Tab>("operaciones");
+  const [tab, setTab] = useState<Tab>("resultados");
   const closed = live?.operaciones_cerradas ?? [];
   const alerts = live?.alertas ?? [];
   const tabs: [Tab, string, number | null][] = [
+    ["resultados", "Ganadas / perdidas", null],
     ["operaciones", "Operaciones", closed.length],
     ["alertas", "Alertas", alerts.length],
     ["metricas", "Métricas", null],
@@ -36,6 +38,7 @@ export function BottomTabs({ live, backtestIs, backtestOos }: {
         ))}
       </header>
       <div className="max-h-[320px] min-h-[180px] overflow-auto">
+        {tab === "resultados" ? <ResultsPanel live={live} /> : null}
         {tab === "operaciones" ? <Trades live={live} /> : null}
         {tab === "alertas" ? <Alerts alerts={alerts} /> : null}
         {tab === "metricas" ? <MetricsTable live={live} backtestIs={backtestIs} backtestOos={backtestOos} /> : null}
@@ -73,6 +76,8 @@ function Trades({ live }: { live: Live | null }) {
               <td className="px-3 py-1.5">
                 <span className="font-sans font-medium">{p.simbolo.split("/")[0]}</span>{" "}
                 <span className={`font-sans text-[11px] uppercase ${p.lado === "long" ? "text-up" : "text-down"}`}>{p.lado === "long" ? "▲ long" : "▼ short"}</span>
+                {p.origen === "manual" ? <span className="ml-1.5 rounded-[2px] border border-line-strong px-1 font-sans text-[10px] uppercase text-ink-muted">manual</span> : null}
+                {p.origen !== "manual" && p.agresividad != null && p.agresividad !== 1 ? <span className="ml-1.5 text-[10px] text-warn">×{p.agresividad}</span> : null}
               </td>
               <td className="px-3 text-ink-muted">{utc(p.abierta)}</td>
               <td className="px-3 text-ink-muted">{utc(p.cerrada)}</td>

@@ -30,6 +30,8 @@ export type BotState = {
   minutos_desde_ciclo?: number | null;
   activo: boolean;
   llamadas_ia_hoy?: number;
+  /** Multiplicador ajustable desde el dashboard; 1 = la estrategia tal como se probó. */
+  agresividad?: { rupturas: number; tendencia: number };
 };
 
 export type Market = {
@@ -38,6 +40,8 @@ export type Market = {
   ts: string;
   cambio_24h: number | null;
   serie_24h: number[];
+  /** Distancia al stop que usaría el bot (1,5 ATR de 4h), en % del precio. */
+  stop_sugerido_pct?: number | null;
 };
 
 export type Position = {
@@ -57,6 +61,9 @@ export type Position = {
   motivo_salida: string | null;
   abierta: string;
   cerrada: string | null;
+  /** "manual" = abierta desde el dashboard; no cuenta en las métricas de la estrategia. */
+  origen?: "bot" | "manual";
+  agresividad?: number;
 };
 
 export type Alert = { fecha: string; nivel: "info" | "warning" | "critical"; mensaje: string };
@@ -123,11 +130,37 @@ export type Backtest = {
   curva: CurvePoint[];
 };
 
+export type ProjectionPoint = { t: string; p10: number; p50: number; p90: number };
+
+/** Banda esperable según el backtest (bootstrap por bloques), desde el inicio de cada cuenta. */
+export type Projection = { inicio: string; capital_inicial: number; fuente: string; puntos: ProjectionPoint[] };
+
+export type Projections = { rupturas: Projection | null; tendencia: Projection | null };
+
+export type CommandStatus = "pendiente" | "ejecutando" | "hecha" | "rechazada" | "error";
+
+export type Command = {
+  id: number;
+  kind: "agresividad" | "abrir" | "cerrar";
+  payload: Record<string, unknown>;
+  status: CommandStatus;
+  result: string | null;
+  created_at: string;
+};
+
+/** Lo que ve el panel de control. `configured`: el despliegue tiene contraseña y usuario operador. */
+export type ControlState =
+  | { authed: false; configured: boolean }
+  | { authed: true; configured: true; commands: Command[] };
+
+export type ActionResult = { ok: true } | { ok: false; error: string };
+
 export type DashboardData = {
   resumen: Summary | null;
   ia: Ai | null;
   backtest_is: Backtest | null;
   backtest_oos: Backtest | null;
+  proyeccion: Projections | null;
   actualizado: string | null;
   /** Problema de configuración o conexión, para mostrar en pantalla en vez de fallar. */
   error: string | null;

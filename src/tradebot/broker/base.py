@@ -38,6 +38,9 @@ class Broker(Protocol):
 
     def min_notional(self, symbol: str) -> float: ...
 
+    def last_price(self, symbol: str) -> float:
+        """Último precio operado (para dimensionar una operación manual)."""
+
     def market_open(self, symbol: str, side: Side, qty: float) -> Fill: ...
 
     def market_close(self, symbol: str, side: Side, qty: float) -> Fill:

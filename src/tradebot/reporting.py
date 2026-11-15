@@ -12,13 +12,15 @@ from datetime import UTC, datetime
 import numpy as np
 import pandas as pd
 
-from tradebot import db
+from tradebot import db, projection
 from tradebot.ai_eval import SAMPLE_SIZE, eval_instance, scored_reviews, selection_r, selection_skill, skill_interval
 from tradebot.backtest.data import load_market
 from tradebot.backtest.metrics import buy_and_hold, summarize
 from tradebot.backtest.variants import build_variants, run_variant
 from tradebot.config import Settings
 from tradebot.exchange import market_symbol
+from tradebot.features.indicators import atr
+from tradebot.live.controls import get_aggressiveness
 
 MAX_POINTS = 800
 _cache: dict[str, tuple[float, object]] = {}
@@ -73,7 +75,8 @@ def bot_state(settings: Settings) -> dict:
     now = datetime.now(UTC)
     base = {"instancia": settings.bot.instance, "variante": settings.strategy.variant,
             "riesgo_por_operacion": settings.risk.risk_per_trade, "kill_switch_pct": settings.risk.max_drawdown,
-            "limite_ia_diario": settings.ai.daily_call_limit, "ahora": now}
+            "limite_ia_diario": settings.ai.daily_call_limit, "ahora": now,
+            "agresividad": _aggressiveness(settings)}
     if not rows:
         return base | {"modo": None, "activo": False}
     mode, reason, kill, heartbeat, calls, calls_date = rows[0]
@@ -85,18 +88,35 @@ def bot_state(settings: Settings) -> dict:
     }
 
 
+def _aggressiveness(settings: Settings) -> dict:
+    with db.connect() as conn:
+        return {"rupturas": get_aggressiveness(conn, settings.bot.instance),
+                "tendencia": get_aggressiveness(conn, settings.trend.instance)}
+
+
+def suggested_stop_pct(rows: list[tuple], settings: Settings) -> float | None:
+    """Distancia al stop que usaría el bot de rupturas: 1,5 ATR(14) de velas de 4h, en % del precio."""
+    hourly = pd.DataFrame(rows, columns=["ts", "high", "low", "close"]).astype(
+        {"high": float, "low": float, "close": float}).set_index("ts").sort_index()
+    bars = hourly.resample("4h").agg({"high": "max", "low": "min", "close": "last"}).dropna()
+    if len(bars) <= settings.strategy.atr_period:
+        return None
+    value = atr(bars["high"], bars["low"], bars["close"], settings.strategy.atr_period).iloc[-1]
+    return float(settings.risk.stop_atr_multiple * value / bars["close"].iloc[-1] * 100)
+
+
 def markets(settings: Settings) -> list[dict]:
     result = []
     for base in settings.bot.bases:
         symbol = market_symbol(base, settings.bot.quote, settings.bot.market_type)
-        rows = _query("select ts, close from candles where symbol = %s and timeframe = %s order by ts desc limit 25",
-                      (symbol, settings.bot.timeframe))
+        rows = _query("select ts, high, low, close from candles where symbol = %s and timeframe = %s "
+                      "order by ts desc limit 240", (symbol, settings.bot.timeframe))
         if not rows:
             continue
-        closes = [float(r[1]) for r in rows]
+        closes = [float(r[3]) for r in rows[:25]]
         result.append({"simbolo": base, "precio": closes[0], "ts": rows[0][0],
                        "cambio_24h": closes[0] / closes[24] - 1 if len(closes) > 24 else None,
-                       "serie_24h": closes[::-1]})
+                       "serie_24h": closes[::-1], "stop_sugerido_pct": suggested_stop_pct(rows, settings)})
     return result
 
 
@@ -122,12 +142,12 @@ def _equity_vs_btc(settings: Settings, instance: str | None = None) -> pd.DataFr
 
 def _positions(settings: Settings) -> pd.DataFrame:
     columns = ["id", "simbolo", "lado", "cantidad", "entrada", "stop", "salida", "pnl", "comisiones", "riesgo",
-               "tamano_ia", "estado", "motivo_salida", "abierta", "cerrada"]
+               "tamano_ia", "estado", "motivo_salida", "abierta", "cerrada", "origen", "agresividad"]
     rows = _query("select id, symbol, side, qty, entry_price, stop_price, exit_price, pnl, fees, risk_distance, "
-                  "size_multiplier, status, exit_reason, opened_at, closed_at from positions where instance = %s "
-                  "order by opened_at desc", (settings.bot.instance,))
+                  "size_multiplier, status, exit_reason, opened_at, closed_at, origin, aggressiveness from positions "
+                  "where instance = %s order by opened_at desc", (settings.bot.instance,))
     df = pd.DataFrame(rows, columns=columns)
-    for col in ["cantidad", "entrada", "stop", "salida", "pnl", "comisiones", "riesgo", "tamano_ia"]:
+    for col in ["cantidad", "entrada", "stop", "salida", "pnl", "comisiones", "riesgo", "tamano_ia", "agresividad"]:
         df[col] = pd.to_numeric(df[col])
     return df
 
@@ -135,7 +155,9 @@ def _positions(settings: Settings) -> pd.DataFrame:
 def live(settings: Settings) -> dict:
     curves = _equity_vs_btc(settings)
     positions = _positions(settings)
-    closed = positions[positions["estado"] == "closed"]
+    all_closed = positions[positions["estado"] == "closed"]
+    # Las métricas miden la estrategia: las operaciones manuales se muestran, pero no cuentan aquí.
+    closed = all_closed[all_closed["origen"] == "bot"]
     trades = pd.DataFrame({
         "net_pnl": closed["pnl"].fillna(0), "fees": closed["comisiones"].fillna(0), "funding": 0.0,
         "r_multiple": (closed["pnl"] / (closed["riesgo"] * closed["cantidad"]).where(lambda r: r > 0)).fillna(0),
@@ -150,7 +172,7 @@ def live(settings: Settings) -> dict:
         "capital_actual": float(curves["equity"].iloc[-1]) if len(curves) else None,
         "dias_en_papel": (curves.index[-1] - curves.index[0]).total_seconds() / 86400 if len(curves) else 0,
         "posiciones_abiertas": positions[positions["estado"] == "open"].to_dict("records"),
-        "operaciones_cerradas": closed.to_dict("records"),
+        "operaciones_cerradas": all_closed.to_dict("records"),
         "alertas": [{"fecha": a[0], "nivel": a[1], "mensaje": a[2]} for a in alerts],
     })
 
@@ -186,6 +208,28 @@ def trend(settings: Settings) -> dict | None:
         "operaciones": [{"fecha": t[0], "simbolo": t[1], "cantidad": float(t[2]), "precio": float(t[3]),
                          "costo": float(t[4]), "peso_antes": float(t[5]), "peso_despues": float(t[6])} for t in trades],
     })
+
+
+# --- ruta proyectada ---
+
+def projections(settings: Settings) -> dict:
+    """Banda esperable según el backtest, desde el primer registro de capital de cada cuenta."""
+    market = load_market(settings)
+    now = pd.Timestamp.now(tz="UTC")
+    sources = {
+        "rupturas": (settings.bot.instance, projection.breakout_returns,
+                     f"backtest in-sample de {settings.strategy.variant}"),
+        "tendencia": (settings.trend.instance, projection.trend_returns, "backtest 2022–2026 de tendencia L/S"),
+    }
+    result = {}
+    for key, (instance, returns, source) in sources.items():
+        first = _query("select ts, equity from equity_snapshots where instance = %s order by ts limit 1", (instance,))
+        if not first:
+            result[key] = None
+            continue
+        start = pd.Timestamp(first[0][0]).floor("D")
+        result[key] = projection.projection(returns(settings, market), start, float(first[0][1]), now, source)
+    return clean(result)
 
 
 # --- analista IA ---

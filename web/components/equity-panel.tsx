@@ -7,9 +7,10 @@ import {
 } from "recharts";
 
 import { num, pct, tone, utc } from "@/lib/format";
-import type { Backtest, CurvePoint, Live, Metrics, Trend } from "@/lib/types";
+import type { Backtest, CurvePoint, Live, Metrics, Projections, Trend } from "@/lib/types";
 
 import { Empty, Stat } from "./panel";
+import { PROJECTION_LEGEND, ProjectionChart, ProjectionVerdict } from "./projection-chart";
 
 type View = "vivo" | "tend" | "is" | "oos";
 const SERIES = [
@@ -17,15 +18,21 @@ const SERIES = [
   { key: "btc", label: "Comprar y mantener BTC", color: "var(--series-btc)" },
 ] as const;
 
-export function EquityPanel({ live, trend, backtestIs, backtestOos }: {
+export function EquityPanel({ live, trend, backtestIs, backtestOos, projections }: {
   live: Live | null;
   trend: Trend | null;
   backtestIs: Backtest | null;
   backtestOos: Backtest | null;
+  projections: Projections | null;
 }) {
   // Sin curva en vivo todavía, se abre en el backtest out-of-sample.
   const [view, setView] = useState<View>((live?.curva.length ?? 0) >= 2 ? "vivo" : "oos");
   const [showTable, setShowTable] = useState(false);
+  // En las cuentas en vivo, la curva se compara contra BTC o contra la banda que esperaba el backtest.
+  const [versus, setVersus] = useState<"btc" | "proyeccion">("btc");
+  const compact = useNarrow();
+  const projection = view === "vivo" ? projections?.rupturas : view === "tend" ? projections?.tendencia : null;
+  const projecting = versus === "proyeccion" && projection != null;
 
   const source = view === "vivo"
     ? { curve: live?.curva ?? [], bot: live?.metricas_bot, btc: live?.metricas_btc,
@@ -56,20 +63,46 @@ export function EquityPanel({ live, trend, backtestIs, backtestOos }: {
 
       <MetricStrip bot={source.bot} btc={source.btc} />
 
-      <div className="flex items-center gap-4 px-3 pt-2 text-[11px] text-ink-muted">
-        {SERIES.map((s) => (
-          <span key={s.key} className="flex items-center gap-1.5">
-            <span className="h-0.5 w-3 rounded-full" style={{ background: s.color }} />
-            {s.label}
-          </span>
-        ))}
-        <button onClick={() => setShowTable((v) => !v)} className="ml-auto text-ink-faint underline-offset-2 hover:text-ink hover:underline">
-          {showTable ? "Ver gráfico" : "Ver tabla"}
-        </button>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-2 text-[11px] text-ink-muted">
+        {projecting
+          ? PROJECTION_LEGEND.map((s) => (
+            <span key={s.label} className="flex items-center gap-1.5">
+              <span className={s.kind === "band" ? "h-2 w-3 rounded-[1px] opacity-40" : "h-0.5 w-3 rounded-full"}
+                style={{ background: s.color, ...(s.kind === "dash" ? { background: `repeating-linear-gradient(90deg, ${s.color} 0 3px, transparent 3px 5px)` } : {}) }} />
+              {s.label}
+            </span>
+          ))
+          : SERIES.map((s) => (
+            <span key={s.key} className="flex items-center gap-1.5">
+              <span className="h-0.5 w-3 rounded-full" style={{ background: s.color }} />
+              {s.label}
+            </span>
+          ))}
+        <span className="ml-auto flex items-center gap-3">
+          {view === "vivo" || view === "tend" ? (
+            <span role="radiogroup" aria-label="Comparar contra" className="flex overflow-hidden rounded-[3px] border border-line-strong">
+              {([["btc", "vs BTC"], ["proyeccion", "vs proyección"]] as const).map(([key, label]) => (
+                <button key={key} role="radio" aria-checked={versus === key} onClick={() => { setVersus(key); setShowTable(false); }}
+                  disabled={key === "proyeccion" && !projection}
+                  className={`px-1.5 py-px disabled:opacity-40 ${versus === key ? "bg-panel-raised text-ink" : "text-ink-faint hover:text-ink"}`}>
+                  {label}
+                </button>
+              ))}
+            </span>
+          ) : null}
+          {!projecting ? (
+            <button onClick={() => setShowTable((v) => !v)} className="text-ink-faint underline-offset-2 hover:text-ink hover:underline">
+              {showTable ? "Ver gráfico" : "Ver tabla"}
+            </button>
+          ) : null}
+        </span>
       </div>
+      {projecting ? <ProjectionVerdict curve={source.curve} projection={projection} /> : null}
 
       <div className="h-[340px] px-1 pb-2">
-        {source.curve.length < 2 ? (
+        {projecting ? (
+          <ProjectionChart curve={source.curve} projection={projection} compact={compact} />
+        ) : source.curve.length < 2 ? (
           <Empty>
             {view === "vivo" || view === "tend"
               ? "La curva aparece cuando el bot acumule ciclos: registra el capital una vez por hora."

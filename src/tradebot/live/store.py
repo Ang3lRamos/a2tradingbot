@@ -20,6 +20,7 @@ class OpenPosition:
     stop_order_id: str | None
     opened_at: datetime
     fees: float
+    origin: str = "bot"  # "bot" o "manual" (abierta desde el dashboard)
 
 
 class LiveStore:
@@ -63,18 +64,20 @@ class LiveStore:
 
     def open_positions(self) -> list[OpenPosition]:
         rows = self.conn.execute(
-            "select id, symbol, side, qty, entry_price, stop_price, risk_distance, stop_order_id, opened_at, fees "
-            "from positions where instance = %s and status = 'open' order by opened_at", (self.instance,)).fetchall()
+            "select id, symbol, side, qty, entry_price, stop_price, risk_distance, stop_order_id, opened_at, fees, "
+            "origin from positions where instance = %s and status = 'open' order by opened_at", (self.instance,)).fetchall()
         return [OpenPosition(r[0], r[1], r[2], float(r[3]), float(r[4]), float(r[5]), float(r[6] or 0), r[7], r[8],
-                             float(r[9])) for r in rows]
+                             float(r[9]), r[10]) for r in rows]
 
     def insert_position(self, signal_id: int | None, symbol: str, side: str, qty: float, entry: float, stop: float,
-                        risk_distance: float, size_multiplier: float, stop_order_id: str, fees: float) -> int:
+                        risk_distance: float, size_multiplier: float, stop_order_id: str, fees: float,
+                        origin: str = "bot", aggressiveness: float = 1.0) -> int:
         return self._commit(
             "insert into positions (instance, signal_id, symbol, side, qty, entry_price, stop_price, risk_distance, "
-            "size_multiplier, stop_order_id, fees) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id",
+            "size_multiplier, stop_order_id, fees, origin, aggressiveness) "
+            "values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id",
             (self.instance, signal_id, symbol, side, qty, entry, stop, risk_distance, size_multiplier,
-             stop_order_id, fees)).fetchone()[0]
+             stop_order_id, fees, origin, aggressiveness)).fetchone()[0]
 
     def update_stop(self, position_id: int, stop: float, stop_order_id: str) -> None:
         self._commit("update positions set stop_price = %s, stop_order_id = %s where id = %s",
